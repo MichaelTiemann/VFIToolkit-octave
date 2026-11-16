@@ -8,6 +8,7 @@ end
 root_dir = fileparts(mfilename('fullpath'));
 
 if enable_ufhorz
+    addpath(fullfile(root_dir, 'upType'),             '-begin');
     addpath(fullfile(root_dir, 'uinfhorz'),           '-begin');
     addpath(fullfile(root_dir, 'ufhorz', 'matrices'), '-begin');
     addpath(fullfile(root_dir, 'ufhorz', 'solvers'),  '-begin');

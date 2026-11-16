@@ -1,5 +1,5 @@
 function persistent_worker(worker_id, ram_dir)
-% PERSISTENT_WORKER Headless Octave worker process backed by RAM-disk binary IPC.
+% PERSISTENT_WORKER Headless Octave worker process with adaptive idle backoff.
 
 init_file  = sprintf('%s/vfi_worker_init.bin', ram_dir);
 if exist(init_file, 'file')
@@ -22,6 +22,7 @@ ready_file = sprintf('%s/vfi_worker_%d_ready', ram_dir, worker_id);
 exit_file  = sprintf('%s/vfi_worker_%d_exited', ram_dir, worker_id);
 
 fclose(fopen(ready_file, 'w'));
+idle_t = tic;
 
 while true
     if exist(in_file, 'file')
@@ -29,8 +30,14 @@ while true
         if should_exit
             exit(0);
         end
+        idle_t = tic;
     else
-        pause(0.001);
+        % Poll fast (1ms) during active bursts; back off to 25ms when idle > 0.25s
+        if toc(idle_t) < 0.25
+            pause(0.001);
+        else
+            pause(0.025);
+        end
     end
 end
 
