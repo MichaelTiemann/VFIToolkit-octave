@@ -1,5 +1,5 @@
 function persistent_worker(worker_id, ram_dir)
-% PERSISTENT_WORKER Headless Octave worker process with adaptive idle backoff.
+% PERSISTENT_WORKER Headless Octave worker with robust atomic load retry.
 
 init_file  = sprintf('%s/vfi_worker_init.bin', ram_dir);
 if exist(init_file, 'file')
@@ -26,13 +26,27 @@ idle_t = tic;
 
 while true
     if exist(in_file, 'file')
-        should_exit = process_task(in_file, out_file, temp_out, exit_file);
-        if should_exit
-            exit(0);
+        % Small retry loop in case file appeared before OS buffer flush completed
+        loaded_ok = false;
+        for retry = 1:10
+            try
+                load('-binary', in_file, 'func', 'args', 'is_vectorized', 'num_outs');
+                loaded_ok = true;
+                break;
+            catch
+                pause(0.001);
+            end
+        end
+        
+        if loaded_ok
+            if exist(in_file, 'file'); delete(in_file); end
+            should_exit = process_task(func, args, is_vectorized, num_outs, out_file, temp_out, exit_file);
+            if should_exit
+                exit(0);
+            end
         end
         idle_t = tic;
     else
-        % Poll fast (1ms) during active bursts; back off to 25ms when idle > 0.25s
         if toc(idle_t) < 0.25
             pause(0.001);
         else
@@ -43,12 +57,9 @@ end
 
 end
 
-function should_exit = process_task(in_file, out_file, temp_out, exit_file)
+function should_exit = process_task(func, args, is_vectorized, num_outs, out_file, temp_out, exit_file)
 should_exit = false;
 try
-    load('-binary', in_file, 'func', 'args', 'is_vectorized', 'num_outs');
-    delete(in_file);
-
     if ischar(func) && strcmp(func, 'EXIT')
         fclose(fopen(exit_file, 'w'));
         should_exit = true;
@@ -68,9 +79,6 @@ try
     save('-binary', temp_out, 'result');
     rename(temp_out, out_file);
 catch err
-    if exist(in_file, 'file')
-        delete(in_file);
-    end
     result = struct('message', err.message);
     save('-binary', temp_out, 'result');
     rename(temp_out, out_file);

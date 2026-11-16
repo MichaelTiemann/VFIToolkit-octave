@@ -45,8 +45,10 @@ for ii = 1:N_i
         par_i  = extract_ptype_struct(Parameters, nm, ii, N_i);
         disc_i = extract_ptype_struct(DiscountFactorParamNames, nm, ii, N_i);
         vfo_i  = extract_ptype_struct(vfoptions, nm, ii, N_i);
+	fprintf("Starting InfHorz nm=%s\n", nm);
         [V.(nm), Policy.(nm)] = ValueFnIter_InfHorz(nd_i, na_i, nz_i, dg_i, ag_i, zg_i, piz_i, rf_i, par_i, disc_i, [], vfo_i);
     else
+	fprintf("Starting FHorz nm=%s\n", nm);
         fhorz_list{end+1} = ii;
     end
 end
@@ -106,16 +108,14 @@ for r = 1:R
     ii   = fhorz_list{r};
     nm   = Names_i{ii};
     nj_r = extract_ptype_struct(N_j, nm, ii, N_i);
-    vfo  = extract_ptype_struct(vfoptions, nm, ii, N_i);
-    if ~isfield(vfo, 'experienceasset'); vfo.experienceasset = 0; end
-    if ~isfield(vfo, 'exoticpreferences'); vfo.exoticpreferences = 'None'; end
-    if ~isfield(vfo, 'n_e'); vfo.n_e = 0; end
-    if ~isfield(vfo, 'n_semiz'); vfo.n_semiz = 0; end
-    if ~isfield(vfo, 'lowmemory'); vfo.lowmemory = 1; end
-    if ~isfield(vfo, 'outputkron'); vfo.outputkron = 0; end
+    vfo  = Default_VFOptions_FHorz(extract_ptype_struct(vfoptions, nm, ii, N_i));
 
     if r == 1; N_j_common = nj_r; end
-    if nj_r ~= N_j_common || vfo.experienceasset ~= 1 || ~strcmp(vfo.exoticpreferences, 'None') || prod(vfo.n_e) > 0 || prod(vfo.n_semiz) > 0
+    if nj_r ~= N_j_common || vfo.experienceasset ~= 1 || vfo.experienceassetu ~= 0 || vfo.experienceassete ~= 0 ...
+            || vfo.experienceassetz ~= 0 || vfo.experienceassetze ~= 0 || vfo.experienceassetsemiz ~= 0 ...
+            || vfo.riskyasset ~= 0 || vfo.residualasset ~= 0 || vfo.dynasty ~= 0 ...
+            || vfo.divideandconquer ~= 0 || vfo.gridinterplayer ~= 0 ...
+            || ~strcmp(vfo.exoticpreferences, 'None') || prod(vfo.n_e) > 0 || prod(vfo.n_semiz) > 0
         return; % Fall back cleanly if heterogeneous horizons or non-ExpAsset
     end
 
