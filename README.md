@@ -1,0 +1,1 @@
+This repo is to be used in conjunction with Robert Kirkby's VFIToolkit-matlab.  It implements a number of shadow functions allowing the VFI Toolkit to be used in Octave environments (that don't naively support things like gpuArray).
