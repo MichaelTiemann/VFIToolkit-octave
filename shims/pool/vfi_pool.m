@@ -1,53 +1,103 @@
-function vfi_pool(action, ncores, ram_dir)
+function state = vfi_pool(action, ncores, ram_dir)
+% VFI_POOL Manage persistent headless GNU Octave workers backed by RAM disk.
+% Automatically propagates the master session's load path and vectorized registry,
+% and pins BLAS/OMP threads to 1 per worker to prevent oversubscription.
+
+persistent active_ncores active_ram_dir
+if isempty(active_ncores); active_ncores = 0; end
+if isempty(active_ram_dir); active_ram_dir = ''; end
+
+if nargin < 1 || strcmpi(action, 'status')
+    state = struct('ncores', active_ncores, 'ram_dir', active_ram_dir, 'active', active_ncores > 0);
+    return;
+end
+
+if nargin < 2 || isempty(ncores)
+    if active_ncores > 0
+        ncores = active_ncores;
+    else
+        ncores = max(1, nproc() - 2); % Leave 2 cores headroom for OS / coordinator
+    end
+end
+if nargin < 3 || isempty(ram_dir)
+    if ~isempty(active_ram_dir)
+        ram_dir = active_ram_dir;
+    else
+        ram_dir = vfi_ramdisk();
+    end
+end
 
 switch lower(action)
-    case 'stop'
-        fprintf('Shutting down %d workers...\n', ncores);
+    case 'ensure'
+        if active_ncores == ncores && strcmp(active_ram_dir, ram_dir)
+            state = struct('ncores', active_ncores, 'ram_dir', active_ram_dir, 'active', true);
+            return;
+        elseif active_ncores > 0
+            vfi_pool('stop', active_ncores, active_ram_dir);
+        end
+        state = vfi_pool('start', ncores, ram_dir);
 
-        % 1. Send EXIT payload to all workers
+    case 'stop'
+        if ncores <= 0; return; end
+        fprintf('Shutting down %d workers...\n', ncores);
         for i = 1:ncores
             func = 'EXIT';
             args = {};
             is_vectorized = false;
             num_outs = 1;
+            temp_in = sprintf('%s/vfi_worker_%d_in_tmp.mat', ram_dir, i);
             in_file = sprintf('%s/vfi_worker_%d_in.mat', ram_dir, i);
-            save('-v6', in_file, 'func', 'args', 'is_vectorized', 'num_outs');
+            save('-v6', temp_in, 'func', 'args', 'is_vectorized', 'num_outs');
+            rename(temp_in, in_file);
         end
-
-        % 2. Shutdown Barrier: Block until every worker signals exit
+        t_wait = tic;
         for i = 1:ncores
             exit_file = sprintf('%s/vfi_worker_%d_exited', ram_dir, i);
-            while ~exist(exit_file, 'file')
-                pause(0.001);
+            while ~exist(exit_file, 'file') && toc(t_wait) < 5.0
+                pause(0.002);
             end
-            delete(exit_file);
+            if exist(exit_file, 'file'); delete(exit_file); end
         end
-
-        % 3. Clean up stale worker files
-        system(sprintf('rm -f %s/vfi_worker_*', ram_dir));
+        system(sprintf('rm -f "%s"/vfi_worker_*', ram_dir));
+        active_ncores = 0;
+        active_ram_dir = '';
+        state = struct('ncores', 0, 'ram_dir', '', 'active', false);
 
     case 'start'
-        fprintf('Starting %d persistent workers...\n', ncores);
-        system(sprintf('rm -f %s/vfi_worker_*', ram_dir));
+        fprintf('Starting %d persistent Octave workers on %s...\n', ncores, ram_dir);
+        system(sprintf('rm -f "%s"/vfi_worker_*', ram_dir));
 
-        % Launch headless worker processes in the background
+        % Serialize current path and vectorized registry so workers mirror master exactly
+        master_path = path();
+        master_pwd  = pwd();
+        vec_names   = vfi_vectorized_registry('get');
+        pool_dir    = fileparts(mfilename('fullpath'));
+        init_file   = sprintf('%s/vfi_worker_init.mat', ram_dir);
+        save('-v6', init_file, 'master_path', 'master_pwd', 'vec_names');
+
         for i = 1:ncores
-            system(sprintf('octave --no-gui --eval "persistent_worker(%d, ''%s'')" &', i, ram_dir));
+            cmd = sprintf( ...
+                'OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 octave-cli --no-gui --no-window-system --eval "addpath(''%s''); persistent_worker(%d, ''%s'')" >/dev/null 2>&1 &', ...
+                pool_dir, i, ram_dir);
+            system(cmd);
         end
 
-        % Startup Barrier: Block until all workers confirm initialization
         for i = 1:ncores
             ready_file = sprintf('%s/vfi_worker_%d_ready', ram_dir, i);
             while ~exist(ready_file, 'file')
-                pause(0.001);
+                pause(0.002);
             end
             delete(ready_file);
         end
+        active_ncores  = ncores;
+        active_ram_dir = ram_dir;
+        state = struct('ncores', active_ncores, 'ram_dir', active_ram_dir, 'active', true);
 
     case 'restart'
-        vfi_pool('stop', ncores, ram_dir);
-        vfi_pool('start', ncores, ram_dir);
+        if active_ncores > 0
+            vfi_pool('stop', active_ncores, active_ram_dir);
+        end
+        state = vfi_pool('start', ncores, ram_dir);
 end
-
 
 end

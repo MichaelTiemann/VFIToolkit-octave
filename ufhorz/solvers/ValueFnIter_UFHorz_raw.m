@@ -141,6 +141,49 @@ for j = N_j:-1:1
             DiscountedEV = precalc_ev_local(EVpre_flat, df, pi_bz, N_a, N_bothz, j, Dims, WG_j);
         end
 
+        % --- GNU OCTAVE PERSISTENT WORKER POOL FAST-PATH (SLICED ACROSS N_bothz) ---
+        pool_st = struct('active', false, 'ncores', 0, 'ram_dir', '');
+        if exist('OCTAVE_VERSION', 'builtin') ~= 0 && exist('vfi_pool', 'file') ~= 0
+            pool_st = vfi_pool('status');
+        end
+        if pool_st.active && pool_st.ncores > 1 && N_bothz > 1 && ~ez_flag && qh_mode == 0 && e_mode == 0
+            bz_all = get_grid_slice_local(Grids.bothz_gridvals_J, 'all', j, has_bothz);
+            e_val  = get_grid_slice_local(vfoptions.e_gridvals_J, 'all', j, has_e);
+            spec_bz_one = ones(1, length(Dims.n_bothz));
+
+            n_work = min(pool_st.ncores, N_bothz);
+            edges  = round(linspace(0, N_bothz, n_work + 1));
+            w_args = cell(1, n_work);
+            for w = 1:n_work
+                z_rng  = (edges(w) + 1):edges(w + 1);
+                bz_sub = bz_all(z_rng, :);
+                if has_cont
+                    ev_sub = DiscountedEV(:, :, :, z_rng, 1);
+                else
+                    ev_sub = [];
+                end
+                w_args{w} = {ReturnFn, Dims.special_n_d, n_a, spec_bz_one, Dims.special_n_e, ...
+                    d_val, a_grid, bz_sub, e_val, ReturnFnParamsVec, ...
+                    has_cont, 1.0, ev_sub, N_d_inner, N_a, N_e};
+            end
+
+            w_res = vfi_dispatch_chunks('ufhorz_raw_chunk_worker', w_args, pool_st.ram_dir, 2);
+            v_all = reshape(cat(2, w_res{:, 1}), [N_a, N_bothz, N_e]);
+            p_all = reshape(cat(2, w_res{:, 2}), [1, N_a, N_bothz, N_e]);
+
+            if N_d_outer == 1
+                V(:, :, :, j)         = v_all;
+                Policy(1, :, :, :, j) = p_all;
+            else
+                d_in_idx = rem(p_all - 1, N_d_inner) + 1;
+                ap_idx   = ceil(p_all / N_d_inner);
+                linear_p = d_in_idx + N_d_inner * (d_outer_c - 1) + (N_d_inner * N_d_outer) * (ap_idx - 1);
+                V_fordouter(:, :, :, d_outer_c) = v_all;
+                P_fordouter(:, :, :, d_outer_c) = reshape(linear_p, [N_a, N_bothz, N_e]);
+            end
+            continue;
+        end
+
         for z_c = 1:N_z_iter
             if z_mode == 0
                 z_idx = 1:N_bothz;

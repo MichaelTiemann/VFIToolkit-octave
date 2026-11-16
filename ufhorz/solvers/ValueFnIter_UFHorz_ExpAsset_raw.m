@@ -157,6 +157,65 @@ for j = N_j:-1:1
             DiscountedEV = precalc_ev_local(EVpre_flat, df, pi_bz, N_e_interp, ExpAsset_J, Dims, vfoptions, j, WG_j);
         end
 
+        % --- GNU OCTAVE PERSISTENT WORKER POOL FAST-PATH (SLICED ACROSS N_a2 x N_bothz) ---
+        pool_st = struct('active', false, 'ncores', 0, 'ram_dir', '');
+        if exist('OCTAVE_VERSION', 'builtin') ~= 0 && exist('vfi_pool', 'file') ~= 0
+            pool_st = vfi_pool('status');
+        end
+        if pool_st.active && pool_st.ncores > 1 && ~ez_flag && qh_mode == 0 && e_mode == 0
+            bz_all = get_grid_slice_local(Grids.bothz_gridvals_J, 'all', j, has_bothz);
+            e_val  = get_grid_slice_local(vfoptions.e_gridvals_J, 'all', j, has_e);
+            spec_bz_one = ones(1, length(Dims.n_bothz)); if ~has_bothz; spec_bz_one = 0; end
+
+            N_pairs = N_a2 * N_bothz;
+            n_work  = min(pool_st.ncores, N_pairs);
+            edges   = round(linspace(0, N_pairs, n_work + 1));
+
+            % Map linear pair index p in 1..N_pairs -> (a2_i, z_i)
+            a2_idx_all = rem((0:N_pairs-1)', N_a2) + 1;
+            z_idx_all  = floor((0:N_pairs-1)' / N_a2) + 1;
+
+            if has_cont
+                % Reshape DiscountedEV [N_d_inner, N_a1, 1, N_a2, N_bothz, N_e_interp] -> [N_d_inner, N_a1, 1, N_pairs, N_e_interp]
+                EV_pairs = reshape(DiscountedEV, [N_d_inner, N_a1, 1, N_pairs, N_e_interp]);
+            end
+
+            w_args = cell(1, n_work);
+            for w = 1:n_work
+                p_rng = (edges(w) + 1):edges(w + 1);
+                a2_sub = a2_gridvals(a2_idx_all(p_rng), :);
+                if has_bothz
+                    bz_sub = bz_all(z_idx_all(p_rng), :);
+                else
+                    bz_sub = [];
+                end
+                if has_cont
+                    ev_sub = EV_pairs(:, :, 1, p_rng, :);
+                else
+                    ev_sub = [];
+                end
+                w_args{w} = {ReturnFn, Dims.special_n_d, n_a1, n_a2, spec_bz_one, Dims.special_n_e, ...
+                    d_val, a1_gridvals, a2_sub, bz_sub, e_val, ReturnFnParamsVec, ...
+                    has_cont, beta0, ev_sub, N_d_inner, N_a1, N_e};
+            end
+
+            w_res = vfi_dispatch_chunks('ufhorz_expasset_chunk_worker', w_args, pool_st.ram_dir, 2);
+            v_all = reshape(cat(2, w_res{:, 1}), [N_a, N_bothz, N_e]);
+            p_all = reshape(cat(2, w_res{:, 2}), [1, N_a, N_bothz, N_e]);
+
+            if N_d_outer == 1
+                V(:, :, :, j)         = v_all;
+                Policy(1, :, :, :, j) = p_all;
+            else
+                d_in_idx = rem(p_all - 1, N_d_inner) + 1;
+                a1p_idx  = ceil(p_all / N_d_inner);
+                linear_p = d_in_idx + N_d_inner * (d_outer_c - 1) + (N_d_inner * N_d_outer) * (a1p_idx - 1);
+                V_fordouter(:, :, :, d_outer_c) = v_all;
+                P_fordouter(:, :, :, d_outer_c) = reshape(linear_p, [N_a, N_bothz, N_e]);
+            end
+            continue;
+        end
+
         for z_c = 1:N_z_iter
             if z_mode == 0
                 z_idx = 1:N_bothz;
