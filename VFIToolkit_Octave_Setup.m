@@ -1,9 +1,5 @@
 function VFIToolkit_Octave_Setup(vectorized_fn_names, enable_ufhorz)
 % VFITOOLKIT_OCTAVE_SETUP Prepend VFIToolkit-octave paths ahead of VFIToolkit-matlab.
-%
-% Usage:
-%   VFIToolkit_Octave_Setup()
-%   VFIToolkit_Octave_Setup({'ReturnFn_SpatialHH', 'ReturnFn_Firm', 'HumanCapital_Lifecycle_aprimeFn'})
 
 if nargin < 2 || isempty(enable_ufhorz)
     enable_ufhorz = true;
@@ -12,6 +8,7 @@ end
 root_dir = fileparts(mfilename('fullpath'));
 
 if enable_ufhorz
+    addpath(fullfile(root_dir, 'uinfhorz'),           '-begin');
     addpath(fullfile(root_dir, 'ufhorz', 'matrices'), '-begin');
     addpath(fullfile(root_dir, 'ufhorz', 'solvers'),  '-begin');
     addpath(fullfile(root_dir, 'ufhorz'),             '-begin');
