@@ -109,7 +109,7 @@ for r = 1:R
     vfo  = Default_VFOptions_FHorz(extract_ptype_struct(vfoptions, nm, ii, N_i));
 
     if r == 1; N_j_common = nj_r; end
-    if nj_r ~= N_j_common || vfo.experienceasset ~= 1 || vfo.experienceassetu ~= 0 || vfo.experienceassete ~= 0 ...
+    if nj_r ~= N_j_common || (vfo.experienceasset ~= 1 && vfo.experienceasset ~= 0) || vfo.experienceassetu ~= 0 || vfo.experienceassete ~= 0 ...
             || vfo.experienceassetz ~= 0 || vfo.experienceassetze ~= 0 || vfo.experienceassetsemiz ~= 0 ...
             || vfo.riskyasset ~= 0 || vfo.residualasset ~= 0 || vfo.dynasty ~= 0 ...
             || vfo.divideandconquer ~= 0 || vfo.gridinterplayer ~= 0 ...
@@ -135,6 +135,11 @@ for r = 1:R
     [Dims, Grids] = Setup_UFHorz(nd_r, na_r, nz_r, nj_r, d_gv, z_gv_J, vfo, par_r);
 
     if Dims.N_d_outer > 1; return; end
+    if r == 1
+        is_exp_mode = (vfo.experienceasset == 1);
+    elseif (vfo.experienceasset == 1) ~= is_exp_mode
+        return;
+    end
 
     s = struct();
     s.nd = nd_r; s.na = na_r; s.nz = nz_r; s.ag = ag_r; s.rf = rf_r;
@@ -170,31 +175,47 @@ for j = N_j_common:-1:1
         df = prod(CreateVectorFromParams(s.par, s.dsc, j));
 
         if has_cont
-            EVpre_flat = reshape(s.VKron(:, :, 1, j+1), [Dims.N_a1 * Dims.N_a2, Dims.N_bothz]);
-            ap_vec = CreateVectorFromParams(s.par, Dims.aprimeFnParamNames, j);
-            [a2pIdx, a2pPrb] = CreateExperienceAssetFnMatrix_UDisc(vfo.aprimeFn, Dims.n_d2, Dims.n_a2, Grids.d2_gridvals, vfo.a2_grid, ap_vec, 2);
+            if is_exp_mode
+                EVpre_flat = reshape(s.VKron(:, :, 1, j+1), [Dims.N_a1 * Dims.N_a2, Dims.N_bothz]);
+                ap_vec = CreateVectorFromParams(s.par, Dims.aprimeFnParamNames, j);
+                [a2pIdx, a2pPrb] = CreateExperienceAssetFnMatrix_UDisc(vfo.aprimeFn, Dims.n_d2, Dims.n_a2, Grids.d2_gridvals, vfo.a2_grid, ap_vec, 2);
 
-            N_d_exp  = size(a2pIdx, 1);
-            N_a2_exp = size(a2pIdx, 2);
-            a1_base  = repelem((1:Dims.N_a1)', N_d_exp, N_a2_exp);
-            idx_lo   = a1_base + Dims.N_a1 * repmat(a2pIdx - 1, Dims.N_a1, 1);
-            idx_hi   = a1_base + Dims.N_a1 * repmat(a2pIdx,     Dims.N_a1, 1);
-            prob_exp = repmat(a2pPrb, Dims.N_a1, 1, Dims.N_bothz);
+                N_d_exp  = size(a2pIdx, 1);
+                N_a2_exp = size(a2pIdx, 2);
+                a1_base  = repelem((1:Dims.N_a1)', N_d_exp, N_a2_exp);
+                idx_lo   = a1_base + Dims.N_a1 * repmat(a2pIdx - 1, Dims.N_a1, 1);
+                idx_hi   = a1_base + Dims.N_a1 * repmat(a2pIdx,     Dims.N_a1, 1);
+                prob_exp = repmat(a2pPrb, Dims.N_a1, 1, Dims.N_bothz);
 
-            Vlo = reshape(EVpre_flat(idx_lo(:), :), [N_d_exp * Dims.N_a1, N_a2_exp, Dims.N_bothz]);
-            Vhi = reshape(EVpre_flat(idx_hi(:), :), [N_d_exp * Dims.N_a1, N_a2_exp, Dims.N_bothz]);
-            prob_exp(Vlo == Vhi) = 0;
-            EV_u = prob_exp .* Vlo + (1 - prob_exp) .* Vhi;
-            EV_u(prob_exp == 0) = Vhi(prob_exp == 0);
-            EV_u(prob_exp == 1) = Vlo(prob_exp == 1);
+                Vlo = reshape(EVpre_flat(idx_lo(:), :), [N_d_exp * Dims.N_a1, N_a2_exp, Dims.N_bothz]);
+                Vhi = reshape(EVpre_flat(idx_hi(:), :), [N_d_exp * Dims.N_a1, N_a2_exp, Dims.N_bothz]);
+                prob_exp(Vlo == Vhi) = 0;
+                EV_u = prob_exp .* Vlo + (1 - prob_exp) .* Vhi;
+                EV_u(prob_exp == 0) = Vhi(prob_exp == 0);
+                EV_u(prob_exp == 1) = Vlo(prob_exp == 1);
 
-            EV = EV_u .* shiftdim(s.piz_J(:, :, j)', -2);
-            EV(isnan(EV)) = 0;
-            EV_c = reshape(sum(EV, 3), [N_d_exp, Dims.N_a1, 1, N_a2_exp, Dims.N_bothz, 1]);
-            if Dims.N_d1 > 1
-                EV_c = repelem(EV_c, Dims.N_d1, 1, 1, 1, 1, 1);
+                EV = EV_u .* shiftdim(s.piz_J(:, :, j)', -2);
+                EV(isnan(EV)) = 0;
+                EV_c = reshape(sum(EV, 3), [N_d_exp, Dims.N_a1, 1, N_a2_exp, Dims.N_bothz, 1]);
+                if Dims.N_d1 > 1
+                    EV_c = repelem(EV_c, Dims.N_d1, 1, 1, 1, 1, 1);
+                end
+                reg_EV{r} = df * reshape(EV_c, [Dims.N_d_inner, Dims.N_a1, 1, Dims.N_a2, Dims.N_bothz, 1]);
+            else
+                EVpre_flat = reshape(s.VKron(:, :, 1, j+1), [Dims.N_a, Dims.N_bothz]);
+                EVinf = (EVpre_flat == -Inf);
+                EV_val = EVpre_flat;
+                EV_val(EVinf) = -1e250;
+                EV_val = EV_val * s.piz_J(:, :, j)';
+                if any(EVinf(:))
+                    EV_val((double(EVinf) * double(s.piz_J(:, :, j)' > 0)) > 0) = -Inf;
+                end
+                EV_c = reshape(EV_val, [1, Dims.N_a, 1, Dims.N_bothz, 1]);
+                if Dims.N_d_inner > 1
+                    EV_c = repelem(EV_c, Dims.N_d_inner, 1, 1, 1, 1);
+                end
+                reg_EV{r} = df * EV_c;
             end
-            reg_EV{r} = df * reshape(EV_c, [Dims.N_d_inner, Dims.N_a1, 1, Dims.N_a2, Dims.N_bothz, 1]);
         end
     end
 
@@ -210,17 +231,22 @@ for j = N_j_common:-1:1
             s  = st{rr};
             Dims = s.Dims; Grids = s.Grids;
             bz_k = Grids.bothz_gridvals_J(zz, :, j);
-            if has_cont
-                ev_k = reg_EV{rr}(:, :, 1, :, zz, 1);
+            if is_exp_mode
+                if has_cont; ev_k = reg_EV{rr}(:, :, 1, :, zz, 1); else; ev_k = []; end
+                sub_jobs{k} = {resolve_fn_name(s.rf), Dims.special_n_d, Dims.n_a1, Dims.n_a2, ...
+                    ones(1, length(Dims.n_bothz)), 0, Grids.d12_gridvals, Grids.a1_gridvals, ...
+                    Grids.a2_gridvals, bz_k, [], reg_rfvec{rr}, has_cont, 1.0, ev_k, ...
+                    Dims.N_d_inner, Dims.N_a1, Dims.N_a2, 1};
             else
-                ev_k = [];
+                if has_cont; ev_k = reg_EV{rr}(:, :, 1, zz, 1); else; ev_k = []; end
+                sub_jobs{k} = {resolve_fn_name(s.rf), Dims.special_n_d, s.na, ...
+                    ones(1, length(Dims.n_bothz)), 0, Grids.d12_gridvals, s.ag, ...
+                    bz_k, [], reg_rfvec{rr}, has_cont, 1.0, ev_k, ...
+                    Dims.N_d_inner, Dims.N_a, 1};
             end
-            sub_jobs{k} = {resolve_fn_name(s.rf), Dims.special_n_d, Dims.n_a1, Dims.n_a2, ...
-                ones(1, length(Dims.n_bothz)), 0, Grids.d12_gridvals, Grids.a1_gridvals, ...
-                Grids.a2_gridvals, bz_k, [], reg_rfvec{rr}, has_cont, 1.0, ev_k, ...
-                Dims.N_d_inner, Dims.N_a1, Dims.N_a2, 1};
         end
-        w_args{w} = {sub_jobs};
+        if is_exp_mode; w_mode = 'expasset'; else; w_mode = 'raw4d'; end
+        w_args{w} = {sub_jobs, w_mode};
     end
 
     w_res = vfi_dispatch_chunks('ufhorz_multi_task_worker', w_args, pool_st.ram_dir, 2);
