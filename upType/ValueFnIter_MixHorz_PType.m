@@ -45,10 +45,8 @@ for ii = 1:N_i
         par_i  = extract_ptype_struct(Parameters, nm, ii, N_i);
         disc_i = extract_ptype_struct(DiscountFactorParamNames, nm, ii, N_i);
         vfo_i  = extract_ptype_struct(vfoptions, nm, ii, N_i);
-	fprintf("Starting InfHorz nm=%s\n", nm);
         [V.(nm), Policy.(nm)] = ValueFnIter_InfHorz(nd_i, na_i, nz_i, dg_i, ag_i, zg_i, piz_i, rf_i, par_i, disc_i, [], vfo_i);
     else
-	fprintf("Starting FHorz nm=%s\n", nm);
         fhorz_list{end+1} = ii;
     end
 end
