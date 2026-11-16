@@ -1,0 +1,7 @@
+*~
+*.bak
+*.asv
+*.mex*
+*.oct
+octave-workspace
+vfi_worker_*.mat
