@@ -1,29 +1,41 @@
-function F = arrayfun(ReturnFn, varargin)
+function varargout = arrayfun(ReturnFn, varargin)
+% ARRAYFUN Octave shim supporting vectorized VFI Toolkit kernels and N-D grid expansion.
 
-% These functions we pass directly to the built-in arrayfun
-C = {@ones, @zeros, @nan, @true, @false};
-if length(varargin)<2 || any(cellfun(@(x) isequal(x, ReturnFn), C))
-    F = builtin('arrayfun', ReturnFn, varargin{:});
+n_out = max(1, nargout);
+varargout = cell(1, n_out);
+
+% 1. Pass built-in allocators, cell/struct arrayfun calls, and Name-Value calls
+%    ('UniformOutput', 'ErrorHandler') straight to Octave's built-in arrayfun
+C = {@ones, @zeros, @nan, @inf, @true, @false};
+has_char_opt = false;
+for k = 1:numel(varargin)
+    if ischar(varargin{k}) || iscell(varargin{k}) || isstruct(varargin{k})
+        has_char_opt = true;
+        break;
+    end
+end
+
+if length(varargin) < 2 || has_char_opt || n_out > 1 || any(cellfun(@(x) isequal(x, ReturnFn), C))
+    [varargout{:}] = builtin('arrayfun', ReturnFn, varargin{:});
     return;
 end
 
 func_str = func2str(ReturnFn);
 
-% Get vfoptions
-vfoptions_local = struct();
+% 2. Check persistent registry first, then caller/base vfoptions.vectorizedarrayfunnames
+vectorized_names = vfi_vectorized_registry('get');
+
 if evalin('base', "exist('vfoptions', 'var')")
-    vfoptions_local = evalin('base', 'vfoptions');
+    vfoptions_base = evalin('base', 'vfoptions');
+    if isstruct(vfoptions_base) && isfield(vfoptions_base, 'vectorizedarrayfunnames')
+        vn = vfoptions_base.vectorizedarrayfunnames;
+        if ischar(vn); vn = {vn}; end
+        vectorized_names = [vectorized_names, vn(:)'];
+    end
 end
 
-% 1. Check if the function is vectorized
 is_vectorized = false;
-if isfield(vfoptions_local, 'vectorizedarrayfunnames')
-    vectorized_names = vfoptions_local.vectorizedarrayfunnames;
-    if ischar(vectorized_names)
-        vectorized_names = {vectorized_names};
-    end
-
-    % HARD OVERRIDE FOR WORKERS: Bypass string matching completely!
+if ~isempty(vectorized_names)
     if any(strcmp(vectorized_names, 'FORCE_VECTORIZED'))
         is_vectorized = true;
     else
@@ -36,13 +48,39 @@ if isfield(vfoptions_local, 'vectorizedarrayfunnames')
     end
 end
 
-% 2. Route directly!
+% 3. Execute vectorized fast-path (with automatic singleton broadcast completion) or scalar fallback
 if is_vectorized
-    % The fast vectorized path (executes locally on whichever node calls it)
     F = ReturnFn(varargin{:});
+
+    % Ensure unused state dimensions (e.g. theta_c outside childhood stages) expand to full grid shape
+    max_nd = ndims(F);
+    last_arr_idx = 0;
+    for i = numel(varargin):-1:1
+        if (isnumeric(varargin{i}) || islogical(varargin{i})) && ~isscalar(varargin{i})
+            last_arr_idx = i;
+            break;
+        end
+    end
+    if last_arr_idx > 0
+        for i = 1:last_arr_idx
+            max_nd = max(max_nd, ndims(varargin{i}));
+        end
+        full_sz = ones(1, max_nd);
+        for i = 1:last_arr_idx
+            sz = size(varargin{i});
+            sz(end+1:max_nd) = 1;
+            full_sz = max(full_sz, sz);
+        end
+        f_sz = size(F);
+        f_sz(end+1:max_nd) = 1;
+        if any(f_sz ~= full_sz)
+            rep_fac = full_sz ./ f_sz;
+            F = repmat(F, rep_fac);
+        end
+    end
+    varargout{1} = F;
 else
-    % The fallback for scalar functions
-    F = arrayfun_expand(ReturnFn, varargin{:});
+    varargout{1} = arrayfun_expand(ReturnFn, varargin{:});
 end
 
 end

@@ -218,7 +218,7 @@ if Dims.risky_flag
     end
 
     if sum(Dims.n_a1) > 0
-        Grids.a1_gridvals = gpuArray(vfoptions.a1_grid(1:Dims.n_a1(1)));
+        if sum(Dims.n_a1) > 0; Grids.a1_gridvals = CreateGridvals(Dims.n_a1, gpuArray(vfoptions.a1_grid), 1); else; Grids.a1_gridvals = gpuArray([]); end
     else
         Grids.a1_gridvals = gpuArray([]);
     end
@@ -252,7 +252,7 @@ else
 end
 
 if Dims.exp_flag > 0
-    Grids.a1_gridvals = gpuArray(vfoptions.a1_grid(1:Dims.n_a1(1)));
+    if sum(Dims.n_a1) > 0; Grids.a1_gridvals = CreateGridvals(Dims.n_a1, gpuArray(vfoptions.a1_grid), 1); else; Grids.a1_gridvals = gpuArray([]); end
     Grids.a2_gridvals = CreateGridvals(Dims.n_a2, gpuArray(vfoptions.a2_grid), 1);
     Grids.d2_gridvals = CreateGridvals(Dims.n_d2, gpuArray(vfoptions.d2_grid), 1);
     if Dims.exp_flag == 6

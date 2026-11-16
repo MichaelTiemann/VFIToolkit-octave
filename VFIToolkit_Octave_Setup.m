@@ -1,9 +1,11 @@
-function VFIToolkit_Octave_Setup(enable_ufhorz)
+function VFIToolkit_Octave_Setup(vectorized_fn_names, enable_ufhorz)
 % VFITOOLKIT_OCTAVE_SETUP Prepend VFIToolkit-octave paths ahead of VFIToolkit-matlab.
-% Call this *after* adding VFIToolkit-matlab to the path so that VFIToolkit-octave
-% shadows GPU-only allocations and routes finite-horizon solvers through UFHorz.
+%
+% Usage:
+%   VFIToolkit_Octave_Setup()
+%   VFIToolkit_Octave_Setup({'ReturnFn_SpatialHH', 'ReturnFn_Firm', 'HumanCapital_Lifecycle_aprimeFn'})
 
-if nargin < 1 || isempty(enable_ufhorz)
+if nargin < 2 || isempty(enable_ufhorz)
     enable_ufhorz = true;
 end
 
@@ -18,6 +20,9 @@ end
 if exist('OCTAVE_VERSION', 'builtin') ~= 0
     addpath(fullfile(root_dir, 'shims', 'pool'), '-begin');
     addpath(fullfile(root_dir, 'shims'),         '-begin');
+    if nargin >= 1 && ~isempty(vectorized_fn_names)
+        vfi_vectorized_registry('add', vectorized_fn_names);
+    end
 end
 
 end
