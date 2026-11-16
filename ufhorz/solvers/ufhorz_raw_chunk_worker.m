@@ -2,7 +2,10 @@ function [v_chunk, p_chunk] = ufhorz_raw_chunk_worker( ...
     ReturnFn, special_n_d, n_a, spec_n_bz_one, spec_n_e, ...
     d_val, a_grid, bz_vals_chunk, e_val, ...
     ReturnFnParamsVec, has_cont, beta0, EV_chunk, N_d_inner, N_a, N_e_slice)
-% UFHORZ_RAW_CHUNK_WORKER Fused map-reduce kernel over z slices for standard 4D UFHorz models.
+
+if ischar(ReturnFn)
+    ReturnFn = str2func(ReturnFn);
+end
 
 K = max(size(bz_vals_chunk, 1), 1);
 v_chunk = zeros(N_a, K, N_e_slice);

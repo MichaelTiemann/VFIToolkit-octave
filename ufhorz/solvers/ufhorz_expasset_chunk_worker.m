@@ -2,15 +2,15 @@ function [v_chunk, p_chunk] = ufhorz_expasset_chunk_worker( ...
     ReturnFn, special_n_d, n_a1, n_a2, spec_n_bz_one, spec_n_e, ...
     d_val, a1_gridvals, a2_vals_chunk, bz_vals_chunk, e_val, ...
     ReturnFnParamsVec, has_cont, beta0, EV_chunk, N_d_inner, N_a1, N_e_slice)
-% UFHORZ_EXPASSET_CHUNK_WORKER Fused L2/SLC-cache-sized map-reduce kernel over (a2, z) pairs.
-% Evaluates ReturnFn + beta0 * DiscountedEV + max() one (a2, z) pair at a time (~122 MB buffer)
-% and returns only the compact [N_a1, K_pairs, N_e_slice] value & policy arrays!
+
+if ischar(ReturnFn)
+    ReturnFn = str2func(ReturnFn);
+end
 
 K = size(a2_vals_chunk, 1);
 v_chunk = zeros(N_a1, K, N_e_slice);
 p_chunk = zeros(N_a1, K, N_e_slice);
-
-has_bz = ~isempty(bz_vals_chunk);
+has_bz  = ~isempty(bz_vals_chunk);
 
 for k = 1:K
     a2_k = a2_vals_chunk(k, :);

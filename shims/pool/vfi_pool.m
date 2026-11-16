@@ -1,7 +1,5 @@
 function state = vfi_pool(action, ncores, ram_dir)
 % VFI_POOL Manage persistent headless GNU Octave workers backed by RAM disk.
-% Automatically propagates the master session's load path and vectorized registry,
-% and pins BLAS/OMP threads to 1 per worker to prevent oversubscription.
 
 persistent active_ncores active_ram_dir
 if isempty(active_ncores); active_ncores = 0; end
@@ -16,7 +14,7 @@ if nargin < 2 || isempty(ncores)
     if active_ncores > 0
         ncores = active_ncores;
     else
-        ncores = max(1, nproc() - 2); % Leave 2 cores headroom for OS / coordinator
+        ncores = max(1, nproc() - 2);
     end
 end
 if nargin < 3 || isempty(ram_dir)
@@ -45,9 +43,9 @@ switch lower(action)
             args = {};
             is_vectorized = false;
             num_outs = 1;
-            temp_in = sprintf('%s/vfi_worker_%d_in_tmp.mat', ram_dir, i);
-            in_file = sprintf('%s/vfi_worker_%d_in.mat', ram_dir, i);
-            save('-v6', temp_in, 'func', 'args', 'is_vectorized', 'num_outs');
+            temp_in = sprintf('%s/vfi_worker_%d_in_tmp.bin', ram_dir, i);
+            in_file = sprintf('%s/vfi_worker_%d_in.bin', ram_dir, i);
+            save('-binary', temp_in, 'func', 'args', 'is_vectorized', 'num_outs');
             rename(temp_in, in_file);
         end
         t_wait = tic;
@@ -58,6 +56,7 @@ switch lower(action)
             end
             if exist(exit_file, 'file'); delete(exit_file); end
         end
+        system('pkill -f "persistent_worker(" >/dev/null 2>&1 || true');
         system(sprintf('rm -f "%s"/vfi_worker_*', ram_dir));
         active_ncores = 0;
         active_ram_dir = '';
@@ -65,15 +64,15 @@ switch lower(action)
 
     case 'start'
         fprintf('Starting %d persistent Octave workers on %s...\n', ncores, ram_dir);
+        system('pkill -f "persistent_worker(" >/dev/null 2>&1 || true');
         system(sprintf('rm -f "%s"/vfi_worker_*', ram_dir));
 
-        % Serialize current path and vectorized registry so workers mirror master exactly
         master_path = path();
         master_pwd  = pwd();
         vec_names   = vfi_vectorized_registry('get');
         pool_dir    = fileparts(mfilename('fullpath'));
-        init_file   = sprintf('%s/vfi_worker_init.mat', ram_dir);
-        save('-v6', init_file, 'master_path', 'master_pwd', 'vec_names');
+        init_file   = sprintf('%s/vfi_worker_init.bin', ram_dir);
+        save('-binary', init_file, 'master_path', 'master_pwd', 'vec_names');
 
         for i = 1:ncores
             cmd = sprintf( ...

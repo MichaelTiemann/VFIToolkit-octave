@@ -1,5 +1,6 @@
 function results = vfi_dispatch_chunks(worker_fn_name, worker_args_cell, ram_dir, num_outs)
-% VFI_DISPATCH_CHUNKS Dispatch K pre-sliced worker payloads across K persistent workers.
+% VFI_DISPATCH_CHUNKS Dispatch K pre-sliced worker payloads across K persistent workers
+% using Octave's native zero-conversion '-binary' format.
 
 K = numel(worker_args_cell);
 func = worker_fn_name;
@@ -7,9 +8,13 @@ is_vectorized = true;
 
 for c = 1:K
     args = worker_args_cell{c};
-    temp_in = sprintf('%s/vfi_worker_%d_in_tmp.mat', ram_dir, c);
-    in_file = sprintf('%s/vfi_worker_%d_in.mat', ram_dir, c);
-    save('-v6', temp_in, 'func', 'args', 'is_vectorized', 'num_outs');
+    % Convert leading function_handle argument (if present) to plain char name
+    if ~isempty(args) && isa(args{1}, 'function_handle')
+        args{1} = resolve_fn_name(args{1});
+    end
+    temp_in = sprintf('%s/vfi_worker_%d_in_tmp.bin', ram_dir, c);
+    in_file = sprintf('%s/vfi_worker_%d_in.bin', ram_dir, c);
+    save('-binary', temp_in, 'func', 'args', 'is_vectorized', 'num_outs');
     rename(temp_in, in_file);
 end
 
@@ -20,9 +25,9 @@ n_done = 0;
 while n_done < K
     for c = 1:K
         if ~done(c)
-            out_file = sprintf('%s/vfi_worker_%d_out.mat', ram_dir, c);
+            out_file = sprintf('%s/vfi_worker_%d_out.bin', ram_dir, c);
             if exist(out_file, 'file')
-                data = load(out_file, 'result');
+                data = load('-binary', out_file, 'result');
                 delete(out_file);
                 if isstruct(data.result) && isfield(data.result, 'message')
                     error('Worker %d exception: %s', c, data.result.message);
@@ -36,7 +41,7 @@ while n_done < K
         end
     end
     if n_done < K
-        pause(0.002);
+        pause(0.001);
     end
 end
 
