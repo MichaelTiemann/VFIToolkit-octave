@@ -1,5 +1,5 @@
 function yyaxis(varargin)
-% YYAXIS Octave twin-axes shim preserving transparent overlay & NextPlot='replacechildren'.
+% YYAXIS Octave twin-axes shim preserving existing NextPlot ('add' when hold on was called prior).
 if nargin == 1
     ax = gca();
     side = varargin{1};
@@ -13,7 +13,11 @@ end
 pair = getappdata(ax, 'vfi_yyaxis_pair');
 if isempty(pair)
     ax_left = ax;
-    builtin('set', ax_left, 'YAxisLocation', 'left', 'Box', 'off', 'NextPlot', 'replacechildren');
+    cur_np  = get(ax_left, 'NextPlot');
+    if strcmpi(cur_np, 'replace')
+        cur_np = 'replacechildren';
+    end
+    builtin('set', ax_left, 'YAxisLocation', 'left', 'Box', 'off', 'NextPlot', cur_np);
     ax_right = axes('Parent', get(ax_left, 'Parent'), ...
         'Position', get(ax_left, 'Position'), ...
         'Color', 'none', ...
@@ -21,14 +25,13 @@ if isempty(pair)
         'XAxisLocation', 'bottom', ...
         'XTick', [], ...
         'Box', 'off', ...
-        'NextPlot', 'replacechildren');
+        'NextPlot', cur_np);
     builtin('set', ax_right, 'XLim', get(ax_left, 'XLim'));
     pair = struct('left', ax_left, 'right', ax_right);
     setappdata(ax_left,  'vfi_yyaxis_pair', pair);
     setappdata(ax_right, 'vfi_yyaxis_pair', pair);
 end
 
-% Always keep right overlay transparent and position-synced with left axes
 builtin('set', pair.right, 'Color', 'none', 'Position', get(pair.left, 'Position'), 'XLim', get(pair.left, 'XLim'));
 
 if strcmpi(side, 'left')

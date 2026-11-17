@@ -1,4 +1,10 @@
 function VFIToolkit_Octave_Setup(vectorized_fn_names, enable_ufhorz)
+    warning('off', 'Octave:shadowed-function');
+    warning('off', 'Octave:classdef-to-struct');
+    if exist('table', 'file') == 0 && exist('table', 'class') == 0
+        try; pkg('load', 'datatypes'); catch; end
+        try; pkg('load', 'tablicious'); catch; end
+    end
 % VFITOOLKIT_OCTAVE_SETUP Prepend VFIToolkit-octave paths ahead of VFIToolkit-matlab.
 
 if nargin < 2 || isempty(enable_ufhorz)
