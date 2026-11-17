@@ -181,7 +181,7 @@ for j = N_j:-1:1
                 end
                 w_args{w} = {ReturnFn, Dims.special_n_d, n_a1, n_a2, spec_bz_one, Dims.special_n_e, ...
                     d_val, a1_gridvals, a2_gridvals, bz_sub, e_val, ReturnFnParamsVec, ...
-                    has_cont, beta0, ev_sub, N_d_inner, N_a1, N_a2, N_e};
+                    has_cont, 1.0, ev_sub, N_d_inner, N_a1, N_a2, N_e};
             end
 
             w_res = vfi_dispatch_chunks('ufhorz_expasset_chunk_worker', w_args, pool_st.ram_dir, 2);

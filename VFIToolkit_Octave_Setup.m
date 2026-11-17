@@ -16,6 +16,7 @@ if enable_ufhorz
 end
 
 if exist('OCTAVE_VERSION', 'builtin') ~= 0
+    warning('off', 'Octave:classdef-to-struct');
     addpath(fullfile(root_dir, 'shims', 'pool'), '-begin');
     addpath(fullfile(root_dir, 'shims'),         '-begin');
     if nargin >= 1 && ~isempty(vectorized_fn_names)

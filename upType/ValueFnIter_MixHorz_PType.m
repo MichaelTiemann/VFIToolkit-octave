@@ -57,7 +57,7 @@ if n_fh == 0
 end
 
 % Check if all FHorz types are ExperienceAsset models with identical N_j so we can fuse their (region x z) slices across all 16 workers!
-can_batch_fhorz = pool_st.active && pool_st.ncores > n_fh && n_fh > 1;
+can_batch_fhorz = pool_st.active && pool_st.ncores >= 2 && n_fh > 1;
 if can_batch_fhorz
     [V_fh, Pol_fh, ok] = batch_solve_fhorz_ptypes(fhorz_list, Names_i, N_i, n_d, n_a, n_z, N_j, d_grid, a_grid, z_grid, pi_z, ReturnFn, Parameters, DiscountFactorParamNames, vfoptions, pool_st);
     if ok
@@ -179,28 +179,13 @@ for j = N_j_common:-1:1
                 EVpre_flat = reshape(s.VKron(:, :, 1, j+1), [Dims.N_a1 * Dims.N_a2, Dims.N_bothz]);
                 ap_vec = CreateVectorFromParams(s.par, Dims.aprimeFnParamNames, j);
                 [a2pIdx, a2pPrb] = CreateExperienceAssetFnMatrix_UDisc(vfo.aprimeFn, Dims.n_d2, Dims.n_a2, Grids.d2_gridvals, vfo.a2_grid, ap_vec, 2);
-
-                N_d_exp  = size(a2pIdx, 1);
-                N_a2_exp = size(a2pIdx, 2);
-                a1_base  = repelem((1:Dims.N_a1)', N_d_exp, N_a2_exp);
-                idx_lo   = a1_base + Dims.N_a1 * repmat(a2pIdx - 1, Dims.N_a1, 1);
-                idx_hi   = a1_base + Dims.N_a1 * repmat(a2pIdx,     Dims.N_a1, 1);
-                prob_exp = repmat(a2pPrb, Dims.N_a1, 1, Dims.N_bothz);
-
-                Vlo = reshape(EVpre_flat(idx_lo(:), :), [N_d_exp * Dims.N_a1, N_a2_exp, Dims.N_bothz]);
-                Vhi = reshape(EVpre_flat(idx_hi(:), :), [N_d_exp * Dims.N_a1, N_a2_exp, Dims.N_bothz]);
-                prob_exp(Vlo == Vhi) = 0;
-                EV_u = prob_exp .* Vlo + (1 - prob_exp) .* Vhi;
-                EV_u(prob_exp == 0) = Vhi(prob_exp == 0);
-                EV_u(prob_exp == 1) = Vlo(prob_exp == 1);
-
-                EV = EV_u .* shiftdim(s.piz_J(:, :, j)', -2);
-                EV(isnan(EV)) = 0;
-                EV_c = reshape(sum(EV, 3), [N_d_exp, Dims.N_a1, 1, N_a2_exp, Dims.N_bothz, 1]);
-                if Dims.N_d1 > 1
-                    EV_c = repelem(EV_c, Dims.N_d1, 1, 1, 1, 1, 1);
+                ExpAsset_J = struct('a2primeIndex', a2pIdx, 'a2primeProbs', a2pPrb);
+                if Dims.has_bothz
+                    pi_bz = s.piz_J(:, :, j);
+                else
+                    pi_bz = 1;
                 end
-                reg_EV{r} = df * reshape(EV_c, [Dims.N_d_inner, Dims.N_a1, 1, Dims.N_a2, Dims.N_bothz, 1]);
+                reg_EV{r} = precalc_ev_expasset_ufhorz(EVpre_flat, df, pi_bz, 1, ExpAsset_J, Dims, vfo, j, []);
             else
                 EVpre_flat = reshape(s.VKron(:, :, 1, j+1), [Dims.N_a, Dims.N_bothz]);
                 EVinf = (EVpre_flat == -Inf);
@@ -268,7 +253,8 @@ end
 
 for r = 1:R
     s = st{r};
-    [V_out{r}, Pol_out{r}] = UnKronUFHorz(s.VKron, s.PKron, [], [], s.nd, s.Dims.n_a1, s.na, s.nz, N_j_common, s.vfo, 0);
+    if is_exp_mode, na_pol = s.Dims.n_a1; else, na_pol = s.na; end
+    [V_out{r}, Pol_out{r}] = UnKronUFHorz(s.VKron, s.PKron, [], [], s.nd, na_pol, s.na, s.nz, N_j_common, s.vfo, 0);
 end
 ok = true;
 
