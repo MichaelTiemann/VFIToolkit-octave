@@ -7,8 +7,32 @@ a2p_idx_base    = ExpAsset_J.a2primeIndex;
 a2p_weight_base = ExpAsset_J.a2primeProbs;
 
 if ~isempty(EVpre_flat)
-    EV_val  = reshape(EVpre_flat, [N_a1*N_a2, N_bothz]);
-    EV_raw  = interp_expasset_local(EV_val, a2p_idx_base, a2p_weight_base, pi_bz, N_e_interp, Dims, vfoptions);
+    EV_val = reshape(EVpre_flat, [N_a1*N_a2, N_bothz]);
+    % Fast BLAS DGEMM expectation before linear interpolation when standard prefs & z-independent aprimeFn
+    if ~Dims.ez_flag && (Dims.exp_flag == 0 || Dims.exp_flag == 1) && length(n_a2) == 1 && max(size(a2p_idx_base, 3), 1) == 1
+        EVinf = (EV_val == -Inf);
+        EV_clean = EV_val;
+        EV_clean(EVinf) = 0;
+        EV_z = EV_clean * pi_bz';
+        if any(EVinf(:))
+            EV_z(EVinf * (pi_bz' > 0) > 0) = -Inf;
+        end
+        N_d_exp  = size(a2p_idx_base, 1);
+        N_a2_exp = size(a2p_idx_base, 2);
+        a1_base  = repelem(gpuArray(1:1:N_a1)', N_d_exp, N_a2_exp);
+        idx_lo   = a1_base + N_a1 * repmat(a2p_idx_base - 1, N_a1, 1);
+        idx_hi   = a1_base + N_a1 * repmat(a2p_idx_base,     N_a1, 1);
+        Vlower   = reshape(EV_z(idx_lo(:), :), [N_d_exp*N_a1, N_a2_exp, N_bothz]);
+        Vupper   = reshape(EV_z(idx_hi(:), :), [N_d_exp*N_a1, N_a2_exp, N_bothz]);
+        prob_exp = repmat(a2p_weight_base, N_a1, 1, N_bothz);
+        prob_exp(Vlower == Vupper) = 0;
+        EV_u = prob_exp .* Vlower + (1 - prob_exp) .* Vupper;
+        EV_u(prob_exp == 0) = Vupper(prob_exp == 0);
+        EV_u(prob_exp == 1) = Vlower(prob_exp == 1);
+        EV_raw = reshape(EV_u, [N_d_exp, N_a1, 1, N_a2_exp, N_bothz, N_e_interp]);
+    else
+        EV_raw = interp_expasset_local(EV_val, a2p_idx_base, a2p_weight_base, pi_bz, N_e_interp, Dims, vfoptions);
+    end
 else
     EV_raw = [];
 end
@@ -157,19 +181,6 @@ else
     EV_coarse = sum(EV, 3);
 end
 EV_coarse = reshape(EV_coarse, [N_d_exp, N_a1, 1, N_a2_exp, N_bothz, N_e_interp]);
-end
 
-function [V_j, Pol_j, max_d_out] = extract_pol_local(V_fordouter, P_fordouter, N_a, N_bothz, N_e)
-[V_j, max_d_out] = max(V_fordouter, [], 4);
-lin_idx = gpuArray(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
-Pol_j = reshape(P_fordouter(lin_idx), [1, N_a, N_bothz, N_e]);
-end
 
-function slice = get_grid_slice_local(grid_J, idx, j, has_var)
-if ~has_var || isempty(grid_J); slice = []; return; end
-if strcmp(idx, 'all')
-    if ndims(grid_J) >= 3; slice = grid_J(:, :, j); else; slice = grid_J; end
-else
-    if ndims(grid_J) >= 3; slice = grid_J(idx, :, j); else; slice = grid_J(idx, :); end
-end
 end

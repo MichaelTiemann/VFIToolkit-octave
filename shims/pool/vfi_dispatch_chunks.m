@@ -10,12 +10,14 @@ for c = 1:K
     if ~isempty(args) && isa(args{1}, 'function_handle')
         args{1} = resolve_fn_name(args{1});
     end
-    temp_in = sprintf('%s/vfi_worker_%d_in_tmp.bin', ram_dir, c);
-    in_file = sprintf('%s/vfi_worker_%d_in.bin', ram_dir, c);
-    
+    temp_in  = sprintf('%s/vfi_worker_%d_in_tmp.bin', ram_dir, c);
+    in_file  = sprintf('%s/vfi_worker_%d_in.bin', ram_dir, c);
+    out_file = sprintf('%s/vfi_worker_%d_out.bin', ram_dir, c);
+
     % Ensure any stale input/output files are cleared before dropping new task
-    if exist(in_file, 'file'); delete(in_file); end
-    
+    if exist(in_file, 'file');  delete(in_file);  end
+    if exist(out_file, 'file'); delete(out_file); end
+
     save('-binary', temp_in, 'func', 'args', 'is_vectorized', 'num_outs');
     rename(temp_in, in_file);
 end
@@ -29,26 +31,36 @@ while n_done < K
         if ~done(c)
             out_file = sprintf('%s/vfi_worker_%d_out.bin', ram_dir, c);
             if exist(out_file, 'file')
+                loaded = false;
                 try
                     data = load('-binary', out_file, 'result');
                     delete(out_file);
+                    loaded = true;
+                catch
+                    % Retry next poll if file is still mid-rename
+                end
+
+                if loaded
+                    % Propagate worker exceptions OUTSIDE try/catch so we never spin forever!
                     if isstruct(data.result) && isfield(data.result, 'message')
                         error('Worker %d exception: %s', c, data.result.message);
+                    elseif isa(data.result, 'MException')
+                        rethrow(data.result);
                     end
+
                     for o = 1:num_outs
                         results{c, o} = data.result{o};
                     end
                     done(c) = true;
                     n_done = n_done + 1;
-                catch
-                    % Retry if file is mid-write by worker
                 end
             end
         end
     end
     if n_done < K
-        pause(0.001);
+        pause(0.0003);
     end
 end
+
 
 end

@@ -24,9 +24,40 @@ if isempty(ReturnFnParamNames)
     ReturnFnParamNames = ReturnFnParamNamesFn(ReturnFn, n_d, n_a, n_z, N_j, vfoptions, Parameters);
 end
 
-% --- 2. Preallocate Outputs & Persistent Buffers ---
+% --- 2. Preallocate Outputs & Persistent Worker Context ---
 V      = zeros(N_a, N_bothz, N_e, N_j, 'gpuArray');
 Policy = zeros(1, N_a, N_bothz, N_e, N_j, 'gpuArray');
+
+pool_st = struct('active', false, 'ncores', 0, 'ram_dir', '');
+if exist('OCTAVE_VERSION', 'builtin') ~= 0 && exist('vfi_pool', 'file') ~= 0 ...
+        && (~isfield(vfoptions, 'in_worker') || ~vfoptions.in_worker)
+    pool_st = vfi_pool('status');
+end
+use_pool = pool_st.active && pool_st.ncores > 1 && (N_a * max(1, N_bothz) > 1) && ~ez_flag && qh_mode == 0 && e_mode == 0;
+
+if use_pool
+    persistent next_raw_ctx_seq
+    if isempty(next_raw_ctx_seq); next_raw_ctx_seq = 0; end
+    next_raw_ctx_seq = next_raw_ctx_seq + 1;
+    ctx_id   = double(getpid()) * 1e6 + next_raw_ctx_seq + rem(now() * 1e8, 1e5);
+    ctx_file = sprintf('%s/vfi_ufhorz_raw_ctx.bin', pool_st.ram_dir);
+
+    spec_bz_one = ones(1, length(Dims.n_bothz));
+    if ~has_bothz; spec_bz_one = 0; end
+
+    S_ctx = struct();
+    S_ctx.ReturnFn_fh  = unwrap_passthrough_fn_local(ReturnFn);
+    S_ctx.special_n_d  = Dims.special_n_d;
+    S_ctx.spec_bz_one  = spec_bz_one;
+    S_ctx.spec_n_e     = Dims.special_n_e;
+    S_ctx.d12_gridvals = Grids.d12_gridvals;
+    S_ctx.a_gridvals   = CreateGridvals(n_a, a_grid(:), 1);
+    S_ctx.N_d_inner    = N_d_inner;
+    S_ctx.N_d_outer    = N_d_outer;
+    S_ctx.N_a          = N_a;
+    S_ctx.N_e          = N_e;
+    save('-binary', ctx_file, '-struct', 'S_ctx');
+end
 
 if qh_mode > 0
     Valt = zeros(N_a, N_bothz, N_e, N_j, 'gpuArray');
@@ -141,30 +172,27 @@ for j = N_j:-1:1
             DiscountedEV = precalc_ev_local(EVpre_flat, df, pi_bz, N_a, N_bothz, j, Dims, WG_j);
         end
 
-        % --- GNU OCTAVE PERSISTENT WORKER POOL FAST-PATH (SLICED ACROSS N_bothz) ---
-        pool_st = struct('active', false, 'ncores', 0, 'ram_dir', '');
-        if exist('OCTAVE_VERSION', 'builtin') ~= 0 && exist('vfi_pool', 'file') ~= 0
-            pool_st = vfi_pool('status');
-        end
-        if pool_st.active && pool_st.ncores > 1 && N_bothz > 1 && ~ez_flag && qh_mode == 0 && e_mode == 0
-            bz_all = get_grid_slice_local(Grids.bothz_gridvals_J, 'all', j, has_bothz);
-            e_val  = get_grid_slice_local(vfoptions.e_gridvals_J, 'all', j, has_e);
-            spec_bz_one = ones(1, length(Dims.n_bothz));
+        % --- GNU OCTAVE PERSISTENT WORKER POOL FAST-PATH (2D (a_cur, z) BALANCED ACROSS ALL CORES) ---
+        if use_pool
+            bz_all  = get_grid_slice_local(Grids.bothz_gridvals_J, 'all', j, has_bothz);
+            e_val   = get_grid_slice_local(vfoptions.e_gridvals_J, 'all', j, has_e);
+            N_total = N_a * max(1, N_bothz);
+            n_work  = min(pool_st.ncores, N_total);
+            edges   = round(linspace(0, N_total, n_work + 1));
+            w_args  = cell(1, n_work);
 
-            n_work = min(pool_st.ncores, N_bothz);
-            edges  = round(linspace(0, N_bothz, n_work + 1));
-            w_args = cell(1, n_work);
             for w = 1:n_work
-                z_rng  = (edges(w) + 1):edges(w + 1);
-                bz_sub = bz_all(z_rng, :);
+                col_start = edges(w) + 1;
+                col_end   = edges(w + 1);
+                z1 = floor((col_start - 1) / N_a) + 1;
+                z2 = floor((col_end   - 1) / N_a) + 1;
                 if has_cont
-                    ev_sub = DiscountedEV(:, :, :, z_rng, 1);
+                    ev_sub = DiscountedEV(:, :, :, z1:z2, 1);
                 else
                     ev_sub = [];
                 end
-                w_args{w} = {ReturnFn, Dims.special_n_d, n_a, spec_bz_one, Dims.special_n_e, ...
-                    d_val, a_grid, bz_sub, e_val, ReturnFnParamsVec, ...
-                    has_cont, 1.0, ev_sub, N_d_inner, N_a, N_e};
+                w_args{w} = {ctx_file, ctx_id, d_outer_c, col_start, col_end, ...
+                    bz_all, e_val, ReturnFnParamsVec, has_cont, beta0, ev_sub, z1 - 1};
             end
 
             w_res = vfi_dispatch_chunks('ufhorz_raw_chunk_worker', w_args, pool_st.ram_dir, 2);
@@ -315,6 +343,24 @@ end % <--- MAIN FUNCTION ENDS HERE!
 % LOCAL SUBFUNCTIONS (Small Array Outputs Only)
 % =========================================================================
 
+function fh_out = unwrap_passthrough_fn_local(fh_in)
+if isa(fh_in, 'function_handle')
+    s = strtrim(func2str(fh_in));
+    if ~isempty(s) && s(1) == '@'
+        tok = regexp(s, '^@\(([^)]*)\)\s*([A-Za-z]\w*)\(([^)]*)\)$', 'tokens', 'once');
+        if numel(tok) == 3
+            lhs_args = regexprep(tok{1}, '\s+', '');
+            rhs_args = regexprep(tok{3}, '\s+', '');
+            if strcmp(lhs_args, rhs_args)
+                fh_out = str2func(tok{2});
+                return;
+            end
+        end
+    end
+end
+fh_out = fh_in;
+end
+
 function DiscountedEV = precalc_ev_local(EVpre_flat, df, pi_bz, N_a, N_bothz, j, Dims, WG_j)
 if ~Dims.ez_flag
     EVinf = (EVpre_flat == -Inf);
@@ -374,4 +420,6 @@ if strcmp(idx, 'all')
 else
     if ndims(grid_J) >= 3; slice = grid_J(idx, :, j); else; slice = grid_J(idx, :); end
 end
+
+
 end

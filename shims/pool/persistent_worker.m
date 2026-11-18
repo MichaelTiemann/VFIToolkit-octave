@@ -3,8 +3,26 @@ function persistent_worker(worker_id, ram_dir)
 
 master_pid = -1;
 init_file  = sprintf('%s/vfi_worker_init.bin', ram_dir);
-if exist(init_file, 'file')
-    S = load('-binary', init_file);
+
+% Wait up to 10 seconds for the master process to create and write the init file
+t_init = tic;
+init_loaded = false;
+while toc(t_init) < 10.0
+    if exist(init_file, 'file')
+        try
+            S = load('-binary', init_file);
+            init_loaded = true;
+            break;
+        catch
+            % File might still be actively written; brief pause and retry
+            pause(0.005);
+        end
+    else
+        pause(0.005);
+    end
+end
+
+if init_loaded
     if isfield(S, 'master_pwd') && exist(S.master_pwd, 'dir')
         cd(S.master_pwd);
     end
@@ -17,6 +35,8 @@ if exist(init_file, 'file')
     if isfield(S, 'vec_names') && ~isempty(S.vec_names)
         vfi_vectorized_registry('set', S.vec_names);
     end
+else
+    warning('persistent_worker:init_timeout', 'Worker %d timed out waiting for init_file.', worker_id);
 end
 
 in_file    = sprintf('%s/vfi_worker_%d_in.bin', ram_dir, worker_id);
@@ -60,10 +80,10 @@ while true
             watch_t = tic;
         end
 
-        if toc(idle_t) < 0.25
-            pause(0.001);
+        if toc(idle_t) < 5.0
+            pause(0.0005); % Stay hot (0.5 ms) across age transitions j = N_j:-1:1
         else
-            pause(0.025);
+            pause(0.020);  % Deep idle only when VFI solve is genuinely finished
         end
     end
 end

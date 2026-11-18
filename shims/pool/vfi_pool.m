@@ -9,13 +9,24 @@ if nargin < 1 || isempty(action)
     action = 'status';
 end
 
+% Determine OS-appropriate default RAM directory (/dev/shm for Linux/WSL, /Volumes for macOS)
+if ispc()
+    default_ram_dir = fullfile(tempdir, 'VFI_RAMDisk');
+elseif ismac()
+    default_ram_dir = '/Volumes/VFI_RAMDisk';
+else
+    % Linux / WSL
+    default_ram_dir = '/dev/shm/VFI_RAMDisk';
+end
+
 switch lower(action)
     case 'status'
         out = struct('active', active_ncores > 0, 'ncores', active_ncores, 'ram_dir', active_ram_dir);
 
     case 'ensure'
-        if nargin < 2 || isempty(ncores); ncores = max(1, nproc() - 2); end
-        if nargin < 3 || isempty(ram_dir); ram_dir = '/Volumes/VFI_RAMDisk'; end
+        phys_cpus = detect_physical_cpus();
+        if nargin < 2 || isempty(ncores); ncores = numel(phys_cpus); end
+        if nargin < 3 || isempty(ram_dir); ram_dir = default_ram_dir; end
         % Verify existing workers are actually alive before reusing pool
         if active_ncores == ncores && strcmp(active_ram_dir, ram_dir) && workers_alive(ram_dir, ncores)
             out = struct('active', true, 'ncores', active_ncores, 'ram_dir', active_ram_dir);
@@ -27,8 +38,9 @@ switch lower(action)
         out = vfi_pool('start', ncores, ram_dir);
 
     case 'start'
-        if nargin < 2 || isempty(ncores); ncores = max(1, nproc() - 2); end
-        if nargin < 3 || isempty(ram_dir); ram_dir = '/Volumes/VFI_RAMDisk'; end
+        phys_cpus = detect_physical_cpus();
+        if nargin < 2 || isempty(ncores); ncores = numel(phys_cpus); end
+        if nargin < 3 || isempty(ram_dir); ram_dir = default_ram_dir; end
 
         % Always reap any stale/orphan workers from crashed prior runs before spawning
         reap_os_workers(ram_dir);
@@ -53,21 +65,36 @@ switch lower(action)
         end
         pool_dir = fileparts(mfilename('fullpath'));
 
+        % Warn if running from /mnt/c DrvFS where 32 workers hit 9P stat contention
+        if strncmp(master_pwd, '/mnt/', 5)
+            fprintf('  [vfi_pool note] Working dir is on WSL /mnt/ (9P); workers will set ignore_function_time_stamp("all") to avoid 9P stat stalls.\n');
+            fflush(stdout);
+        end
+
         pids = zeros(ncores, 1);
         for w = 1:ncores
-            cmd = sprintf('OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 "%s" --no-gui --no-history --quiet --eval "addpath(''%s''); persistent_worker(%d, ''%s'');" >/dev/null 2>&1 & echo $!', ...
-                oct_bin, pool_dir, w, ram_dir);
+            % Set threading variables for cross-platform support (Linux/OpenBLAS + macOS/Accelerate)
+            log_file = sprintf('%s/worker_%d.log', ram_dir, w);
+            if ~ismac() && ~ispc()
+                % Pin worker w to unique physical core primary thread (avoids WSL2/Linux interleaved SMT pairs!)
+                cpu_id = phys_cpus(mod(w - 1, numel(phys_cpus)) + 1);
+                pin_prefix = sprintf('taskset -c %d ', cpu_id);
+            else
+                pin_prefix = '';
+            end
+            cmd = sprintf('OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 %s"%s" --no-gui --no-history --quiet --eval "ignore_function_time_stamp(''all''); addpath(''%s''); persistent_worker(%d, ''%s'');" >"%s" 2>&1 & echo $!', ...
+                pin_prefix, oct_bin, pool_dir, w, ram_dir, log_file);
             [~, pid_str] = system(cmd);
             pids(w) = str2double(strtrim(pid_str));
         end
         pid_file = sprintf('%s/vfi_worker_pids.txt', ram_dir);
         dlmwrite(pid_file, pids, '\n');
 
-        % Wait up to 15s for all workers to signal ready
+        % Wait up to 180s for all workers to signal ready
         t_wait = tic;
         n_ready = 0;
         ready_mask = false(ncores, 1);
-        while n_ready < ncores && toc(t_wait) < 15.0
+        while n_ready < ncores && toc(t_wait) < 180.0
             for w = 1:ncores
                 if ~ready_mask(w) && exist(sprintf('%s/vfi_worker_%d_ready', ram_dir, w), 'file')
                     ready_mask(w) = true;
@@ -88,7 +115,7 @@ switch lower(action)
 
     case 'stop'
         target_dir = active_ram_dir;
-        if isempty(target_dir); target_dir = '/Volumes/VFI_RAMDisk'; end
+        if isempty(target_dir); target_dir = default_ram_dir; end
         if active_ncores > 0
             fprintf('Shutting down %d workers...\n', active_ncores);
             fflush(stdout);
@@ -113,6 +140,23 @@ switch lower(action)
         error('vfi_pool: unknown action "%s"', action);
 end
 
+end
+
+function phys_cpus = detect_physical_cpus()
+% Returns 0-based OS CPU IDs of unique physical cores (1 thread per physical core).
+if ~ismac() && ~ispc()
+    [st, out_str] = system('cat /sys/devices/system/cpu/cpu[0-9]*/topology/thread_siblings_list 2>/dev/null | cut -d"," -f1 | cut -d"-" -f1 | sort -nu');
+    if st == 0 && ~isempty(strtrim(out_str))
+        vals = sscanf(out_str, '%d');
+        if ~isempty(vals)
+            phys_cpus = vals(:)';
+            return;
+        end
+    end
+end
+% Fallback if sysfs unavailable (macOS / Windows)
+n_log = nproc();
+phys_cpus = 0:(max(1, n_log - 2) - 1);
 end
 
 function tf = has_orphan_workers()
@@ -161,4 +205,6 @@ system('pkill -9 -f "persistent_worker\(" >/dev/null 2>&1 || true');
 if exist(ram_dir, 'dir')
     system(sprintf('rm -f "%s"/vfi_worker_* >/dev/null 2>&1 || true', ram_dir));
 end
+
+
 end

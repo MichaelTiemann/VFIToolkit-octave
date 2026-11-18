@@ -38,9 +38,46 @@ else
     Policyalt = [];
 end
 
-% --- 2. Preallocate Outputs & Persistent Slice Offsets ---
+% --- 2. Preallocate Outputs & Persistent Worker Context (ONCE per VFI solve!) ---
 V      = zeros(N_a, N_bothz, N_e, N_j, 'gpuArray');
 Policy = zeros(1, N_a, N_bothz, N_e, N_j, 'gpuArray');
+
+pool_st = struct('active', false, 'ncores', 0, 'ram_dir', '');
+if exist('OCTAVE_VERSION', 'builtin') ~= 0 && exist('vfi_pool', 'file') ~= 0 ...
+        && (~isfield(vfoptions, 'in_worker') || ~vfoptions.in_worker)
+    pool_st = vfi_pool('status');
+end
+use_pool = pool_st.active && pool_st.ncores > 1 && (N_a1 * N_bothz > 1) && ~ez_flag && qh_mode == 0 && e_mode == 0;
+
+if use_pool
+    persistent next_ctx_seq
+    if isempty(next_ctx_seq); next_ctx_seq = 0; end
+    next_ctx_seq = next_ctx_seq + 1;
+    ctx_id   = double(getpid()) * 1e6 + next_ctx_seq + rem(now() * 1e8, 1e5);
+    ctx_file = sprintf('%s/vfi_ufhorz_exp_ctx.bin', pool_st.ram_dir);
+
+    spec_bz_one = ones(1, length(Dims.n_bothz));
+    if ~has_bothz; spec_bz_one = 0; end
+
+    S_ctx = struct();
+    S_ctx.ReturnFn_fh  = unwrap_passthrough_fn_local(ReturnFn);
+    S_ctx.special_n_d  = Dims.special_n_d;
+    S_ctx.n_a1         = n_a1;
+    S_ctx.n_a2         = n_a2;
+    S_ctx.spec_bz_one  = spec_bz_one;
+    S_ctx.spec_n_e     = Dims.special_n_e;
+    S_ctx.d12_gridvals = Grids.d12_gridvals;
+    S_ctx.a1_gridvals  = a1_gridvals;
+    S_ctx.a2_gridvals  = a2_gridvals;
+    S_ctx.N_d1         = max(1, N_d1);
+    S_ctx.N_d2         = max(1, N_d2);
+    S_ctx.N_d_inner    = N_d_inner;
+    S_ctx.N_d_outer    = N_d_outer;
+    S_ctx.N_a1         = N_a1;
+    S_ctx.N_a2         = N_a2;
+    S_ctx.N_e          = N_e;
+    save('-binary', ctx_file, '-struct', 'S_ctx');
+end
 
 if qh_mode == 2
     a2_ind_SL = reshape(floor(gpuArray(0:1:N_a-1) / N_a1), [1, N_a, 1, 1]);
@@ -154,39 +191,40 @@ for j = N_j:-1:1
             else
                 pi_bz = 1;
             end
-            DiscountedEV = precalc_ev_local(EVpre_flat, df, pi_bz, N_e_interp, ExpAsset_J, Dims, vfoptions, j, WG_j);
+            DiscountedEV = precalc_ev_local(EVpre_flat, df, pi_bz, N_e_interp, ExpAsset_J, Dims, vfoptions, j, WG_j, use_pool);
         end
 
-        % --- GNU OCTAVE PERSISTENT WORKER POOL FAST-PATH (ZERO-REDUNDANCY Z-SLICES) ---
-        pool_st = struct('active', false, 'ncores', 0, 'ram_dir', '');
-        if exist('OCTAVE_VERSION', 'builtin') ~= 0 && exist('vfi_pool', 'file') ~= 0 ...
-                && (~isfield(vfoptions, 'in_worker') || ~vfoptions.in_worker)
-            pool_st = vfi_pool('status');
-        end
-        if pool_st.active && pool_st.ncores > 1 && N_bothz > 1 && ~ez_flag && qh_mode == 0 && e_mode == 0
-            bz_all = get_grid_slice_local(Grids.bothz_gridvals_J, 'all', j, has_bothz);
-            e_val  = get_grid_slice_local(vfoptions.e_gridvals_J, 'all', j, has_e);
-            spec_bz_one = ones(1, length(Dims.n_bothz)); if ~has_bothz; spec_bz_one = 0; end
+        % --- GNU OCTAVE PERSISTENT WORKER POOL FAST-PATH (2D (a1_cur, z) BALANCED ACROSS ALL CORES) ---
+        if use_pool
+            bz_all  = get_grid_slice_local(Grids.bothz_gridvals_J, 'all', j, has_bothz);
+            e_val   = get_grid_slice_local(vfoptions.e_gridvals_J, 'all', j, has_e);
+            N_total = N_a1 * max(1, N_bothz);
+            n_work  = min(pool_st.ncores, N_total);
+            edges   = round(linspace(0, N_total, n_work + 1));
+            w_args  = cell(1, n_work);
 
-            n_work = min(pool_st.ncores, N_bothz);
-            edges  = round(linspace(0, N_bothz, n_work + 1));
-            w_args = cell(1, n_work);
             for w = 1:n_work
-                z_rng  = (edges(w) + 1):edges(w + 1);
-                bz_sub = bz_all(z_rng, :);
+                col_start = edges(w) + 1;
+                col_end   = edges(w + 1);
+                z1 = floor((col_start - 1) / N_a1) + 1;
+                z2 = floor((col_end   - 1) / N_a1) + 1;
                 if has_cont
-                    ev_sub = DiscountedEV(:, :, 1, :, z_rng, :);
+                    ev_sub = DiscountedEV(:, :, :, :, z1:z2, :);
                 else
                     ev_sub = [];
                 end
-                w_args{w} = {ReturnFn, Dims.special_n_d, n_a1, n_a2, spec_bz_one, Dims.special_n_e, ...
-                    d_val, a1_gridvals, a2_gridvals, bz_sub, e_val, ReturnFnParamsVec, ...
-                    has_cont, 1.0, ev_sub, N_d_inner, N_a1, N_a2, N_e};
+                w_args{w} = {'', ctx_file, ctx_id, d_outer_c, col_start, col_end, ...
+                    bz_all, e_val, ReturnFnParamsVec, has_cont, beta0, ev_sub, z1 - 1};
+                % Drop leading placeholder so arg 1 is ctx_file (char, untouched by resolve_fn_name)
+                w_args{w} = w_args{w}(2:end);
             end
 
             w_res = vfi_dispatch_chunks('ufhorz_expasset_chunk_worker', w_args, pool_st.ram_dir, 2);
-            v_all = reshape(cat(2, w_res{:, 1}), [N_a, N_bothz, N_e]);
-            p_all = reshape(cat(2, w_res{:, 2}), [1, N_a, N_bothz, N_e]);
+            % Concatenate [N_a2, n_cols_w, N_e] along dim 2 -> [N_a2, N_a1*N_bothz, N_e] -> permute to [N_a1*N_a2, N_bothz, N_e]
+            v_cat = reshape(cat(2, w_res{:, 1}), [N_a2, N_a1, N_bothz, N_e]);
+            p_cat = reshape(cat(2, w_res{:, 2}), [N_a2, N_a1, N_bothz, N_e]);
+            v_all = reshape(permute(v_cat, [2, 1, 3, 4]), [N_a, N_bothz, N_e]);
+            p_all = reshape(permute(p_cat, [2, 1, 3, 4]), [1, N_a, N_bothz, N_e]);
 
             if N_d_outer == 1
                 V(:, :, :, j)         = v_all;
@@ -307,7 +345,28 @@ end
 
 end % <--- MAIN FUNCTION ENDS HERE!
 
-function DiscountedEV = precalc_ev_local(EVpre_flat, df, pi_bz, N_e_interp, ExpAsset_J, Dims, vfoptions, j, WG_j)
+function fh_out = unwrap_passthrough_fn_local(fh_in)
+% Extracts @TargetFn from pure pass-through @(x,y)TargetFn(x,y) so Octave binary save
+% has zero closure overhead and hits the compiled .m symbol table directly.
+if isa(fh_in, 'function_handle')
+    s = strtrim(func2str(fh_in));
+    if ~isempty(s) && s(1) == '@'
+        tok = regexp(s, '^@\(([^)]*)\)\s*([A-Za-z]\w*)\(([^)]*)\)$', 'tokens', 'once');
+        if numel(tok) == 3
+            lhs_args = regexprep(tok{1}, '\s+', '');
+            rhs_args = regexprep(tok{3}, '\s+', '');
+            if strcmp(lhs_args, rhs_args)
+                fh_out = str2func(tok{2});
+                return;
+            end
+        end
+    end
+end
+fh_out = fh_in;
+end
+
+function DiscountedEV = precalc_ev_local(EVpre_flat, df, pi_bz, N_e_interp, ExpAsset_J, Dims, vfoptions, j, WG_j, keep_compact_d1)
+if nargin < 10; keep_compact_d1 = false; end
 N_a1 = Dims.N_a1; N_a2 = Dims.N_a2; N_bothz = Dims.N_bothz; N_semiz = Dims.N_semiz;
 N_d1 = Dims.N_d1; N_d2 = Dims.N_d2; N_d_inner = Dims.N_d_inner; n_a2 = Dims.n_a2;
 
@@ -315,8 +374,32 @@ a2p_idx_base    = ExpAsset_J.a2primeIndex;
 a2p_weight_base = ExpAsset_J.a2primeProbs;
 
 if ~isempty(EVpre_flat)
-    EV_val  = reshape(EVpre_flat, [N_a1*N_a2, N_bothz]);
-    EV_raw  = interp_expasset_local(EV_val, a2p_idx_base, a2p_weight_base, pi_bz, N_e_interp, Dims, vfoptions);
+    EV_val = reshape(EVpre_flat, [N_a1*N_a2, N_bothz]);
+    % Fast BLAS DGEMM path when preferences are standard and aprimeFn does not depend on z'/u
+    if ~Dims.ez_flag && (Dims.exp_flag == 0 || Dims.exp_flag == 1) && length(n_a2) == 1 && max(size(a2p_idx_base, 3), 1) == 1
+        EVinf = (EV_val == -Inf);
+        EV_clean = EV_val;
+        EV_clean(EVinf) = 0;
+        EV_z = EV_clean * pi_bz';
+        if any(EVinf(:))
+            EV_z(EVinf * (pi_bz' > 0) > 0) = -Inf;
+        end
+        N_d_exp  = size(a2p_idx_base, 1);
+        N_a2_exp = size(a2p_idx_base, 2);
+        a1_base  = repelem(gpuArray(1:1:N_a1)', N_d_exp, N_a2_exp);
+        idx_lo   = a1_base + N_a1 * repmat(a2p_idx_base - 1, N_a1, 1);
+        idx_hi   = a1_base + N_a1 * repmat(a2p_idx_base,     N_a1, 1);
+        Vlower   = reshape(EV_z(idx_lo(:), :), [N_d_exp*N_a1, N_a2_exp, N_bothz]);
+        Vupper   = reshape(EV_z(idx_hi(:), :), [N_d_exp*N_a1, N_a2_exp, N_bothz]);
+        prob_exp = repmat(a2p_weight_base, N_a1, 1, N_bothz);
+        prob_exp(Vlower == Vupper) = 0;
+        EV_u = prob_exp .* Vlower + (1 - prob_exp) .* Vupper;
+        EV_u(prob_exp == 0) = Vupper(prob_exp == 0);
+        EV_u(prob_exp == 1) = Vlower(prob_exp == 1);
+        EV_raw = reshape(EV_u, [N_d_exp, N_a1, 1, N_a2_exp, N_bothz, N_e_interp]);
+    else
+        EV_raw = interp_expasset_local(EV_val, a2p_idx_base, a2p_weight_base, pi_bz, N_e_interp, Dims, vfoptions);
+    end
 else
     EV_raw = [];
 end
@@ -325,6 +408,11 @@ if ~Dims.ez_flag
     EV_coarse = EV_raw;
     N_d_exp  = size(EV_coarse, 1);
     N_a2_exp = size(EV_coarse, 4);
+    if keep_compact_d1
+        % Keep unexpanded in N_d1, N_d2 (if 1), and N_a2 (if 1) for 12x smaller IPC & L2 cache residency!
+        DiscountedEV = df * reshape(EV_coarse, [1, N_d_exp, N_a1, N_a2_exp, N_bothz, N_e_interp]);
+        return;
+    end
     if N_d_exp == 1 && N_d2 > 1;   EV_coarse = repmat(EV_coarse, [N_d2, 1, 1, 1, 1, 1]); end
     if N_a2_exp == 1 && N_a2 > 1;  EV_coarse = repmat(EV_coarse, [1, 1, 1, N_a2, 1, 1]); end
     if N_d1 > 1;                   EV_coarse = repelem(EV_coarse, N_d1, 1, 1, 1, 1, 1);  end
@@ -480,4 +568,6 @@ if strcmp(idx, 'all')
 else
     if ndims(grid_J) >= 3; slice = grid_J(idx, :, j); else; slice = grid_J(idx, :); end
 end
+
+
 end
