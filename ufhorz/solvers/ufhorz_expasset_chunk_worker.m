@@ -70,7 +70,8 @@ if nargin <= 12
     end
 
     denom_pts = max(1, N_d_inner * N_a1 * max(1, N_a2) * max(1, N_e_slice));
-    blk_sz    = max(1, min(N_a1, floor(2097152 / denom_pts)));
+    if ismac(), tile_elems = 2097152; else, tile_elems = 524288; end
+    blk_sz    = max(1, min(N_a1, floor(tile_elems / denom_pts)));
 
     z_first = floor((col_start - 1) / N_a1) + 1;
     z_last  = floor((col_end   - 1) / N_a1) + 1;
@@ -171,7 +172,8 @@ if sum(n_a2) > 0
 end
 
 denom_pts = max(1, N_d_inner * N_a1 * max(1, N_a2) * max(1, N_e_slice));
-blk_sz    = max(1, min(N_a1, floor(2097152 / denom_pts)));
+if ismac(), tile_elems = 2097152; else, tile_elems = 524288; end
+blk_sz    = max(1, min(N_a1, floor(tile_elems / denom_pts)));
 N_e_ev    = 1;
 if has_cont; N_e_ev = size(EV_chunk, 6); end
 

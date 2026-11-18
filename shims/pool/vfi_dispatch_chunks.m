@@ -15,8 +15,8 @@ for c = 1:K
     out_file = sprintf('%s/vfi_worker_%d_out.bin', ram_dir, c);
 
     % Ensure any stale input/output files are cleared before dropping new task
-    if exist(in_file, 'file');  delete(in_file);  end
-    if exist(out_file, 'file'); delete(out_file); end
+    if ~isempty(stat(in_file));  delete(in_file);  end
+    if ~isempty(stat(out_file)); delete(out_file); end
 
     save('-binary', temp_in, 'func', 'args', 'is_vectorized', 'num_outs');
     rename(temp_in, in_file);
@@ -30,7 +30,7 @@ while n_done < K
     for c = 1:K
         if ~done(c)
             out_file = sprintf('%s/vfi_worker_%d_out.bin', ram_dir, c);
-            if exist(out_file, 'file')
+            if ~isempty(stat(out_file))
                 loaded = false;
                 try
                     data = load('-binary', out_file, 'result');

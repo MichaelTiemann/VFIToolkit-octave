@@ -8,7 +8,7 @@ init_file  = sprintf('%s/vfi_worker_init.bin', ram_dir);
 t_init = tic;
 init_loaded = false;
 while toc(t_init) < 10.0
-    if exist(init_file, 'file')
+    if ~isempty(stat(init_file))
         try
             S = load('-binary', init_file);
             init_loaded = true;
@@ -50,7 +50,7 @@ idle_t  = tic;
 watch_t = tic;
 
 while true
-    if exist(in_file, 'file')
+    if ~isempty(stat(in_file))
         loaded_ok = false;
         for retry = 1:10
             try
@@ -63,7 +63,7 @@ while true
         end
 
         if loaded_ok
-            if exist(in_file, 'file'); delete(in_file); end
+            if ~isempty(stat(in_file)); delete(in_file); end
             should_exit = process_task(func, args, is_vectorized, num_outs, out_file, temp_out, exit_file);
             if should_exit
                 exit(0);

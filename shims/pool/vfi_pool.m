@@ -25,7 +25,7 @@ end
 if active_ncores == 0
     for cand_dir = {default_ram_dir, '/dev/shm/VFI_RAMDisk'}
         pid_f = sprintf('%s/vfi_worker_pids.txt', cand_dir{1});
-        if exist(pid_f, 'file')
+        if ~isempty(stat(pid_f))
             try
                 pids_chk = dlmread(pid_f);
                 if ~isempty(pids_chk) && pids_chk(1) > 0 && kill(pids_chk(1), 0) == 0
@@ -56,7 +56,7 @@ switch lower(action)
         % Verify existing workers are actually alive AND have current vec_names before reusing pool
         init_f = sprintf('%s/vfi_worker_init.bin', ram_dir);
         vec_ok = false;
-        if exist(init_f, 'file')
+        if ~isempty(stat(init_f))
             try
                 S_chk = load('-binary', init_f, 'vec_names');
                 vec_ok = isequal(S_chk.vec_names, vfi_vectorized_registry('get'));
@@ -84,8 +84,13 @@ switch lower(action)
             mkdir(ram_dir);
         end
 
-        master_pwd  = pwd();
-        master_path = path();
+        orig_pwd    = pwd();
+        master_path = stage_wsl_mnt_paths([orig_pwd, pathsep(), path()], ram_dir);
+        if strncmp(orig_pwd, '/mnt/', 5)
+            master_pwd = ram_dir;
+        else
+            master_pwd = orig_pwd;
+        end
         master_pid  = getpid();
         vec_names   = vfi_vectorized_registry('get');
         init_file   = sprintf('%s/vfi_worker_init.bin', ram_dir);
@@ -131,7 +136,7 @@ switch lower(action)
         ready_mask = false(ncores, 1);
         while n_ready < ncores && toc(t_wait) < 180.0
             for w = 1:ncores
-                if ~ready_mask(w) && exist(sprintf('%s/vfi_worker_%d_ready', ram_dir, w), 'file')
+                if ~ready_mask(w) && ~isempty(stat(sprintf('%s/vfi_worker_%d_ready', ram_dir, w)))
                     ready_mask(w) = true;
                     n_ready = n_ready + 1;
                 end
@@ -201,7 +206,7 @@ end
 
 function tf = workers_alive(ram_dir, ncores)
 pid_file = sprintf('%s/vfi_worker_pids.txt', ram_dir);
-if ~exist(pid_file, 'file')
+if isempty(stat(pid_file))
     tf = false;
     return;
 end
@@ -222,7 +227,7 @@ end
 function reap_os_workers(ram_dir)
 % 1. Kill tracked PIDs if pid_file exists
 pid_file = sprintf('%s/vfi_worker_pids.txt', ram_dir);
-if exist(pid_file, 'file')
+if ~isempty(stat(pid_file))
     try
         pids = dlmread(pid_file);
         for k = 1:numel(pids)
@@ -238,8 +243,50 @@ system('pkill -f "persistent_worker\(" >/dev/null 2>&1 || true');
 pause(0.05);
 system('pkill -9 -f "persistent_worker\(" >/dev/null 2>&1 || true');
 if exist(ram_dir, 'dir')
-    system(sprintf('rm -f "%s"/vfi_* "%s"/worker_*.log >/dev/null 2>&1 || true', ram_dir, ram_dir));
+    system(sprintf('rm -rf "%s"/vfi_* "%s"/worker_*.log "%s"/path_mirror >/dev/null 2>&1 || true', ram_dir, ram_dir, ram_dir));
 end
+end
+
+function out_path = stage_wsl_mnt_paths(in_path, ram_dir)
+% Mirrors /mnt/... MATLAB/Octave code directories (including pwd) into /dev/shm once
+% so 32 WSL workers boot in ~5s from RAM instead of stalling 75s+ on 9P scans.
+out_path = in_path;
+if ismac() || ispc() || isempty(strfind(in_path, '/mnt/'))
+    return;
+end
+dirs = strsplit(in_path, pathsep());
+mirror_root = sprintf('%s/path_mirror', ram_dir);
+if ~isempty(stat(mirror_root))
+    system(sprintf('rm -rf "%s"', mirror_root));
+end
+mkdir(mirror_root);
+
+staged_map = containers.Map('KeyType', 'char', 'ValueType', 'char');
+idx = 0;
+keep_dirs = {};
+for k = 1:numel(dirs)
+    d = strtrim(dirs{k});
+    if isempty(d) || strcmp(d, '.')
+        continue;
+    end
+    if strncmp(d, '/mnt/', 5)
+        if isKey(staged_map, d)
+            keep_dirs{end+1} = staged_map(d);
+        elseif exist(d, 'dir')
+            idx = idx + 1;
+            dst = sprintf('%s/d%03d', mirror_root, idx);
+            mkdir(dst);
+            dq   = ['''', strrep(d, '''', '''\'''''), ''''];
+            dstq = ['''', strrep(dst, '''', '''\'''''), ''''];
+            system(sprintf('cp -a %s/*.m %s/*.oct %s/*.mex %s/@* %s/+* %s/ 2>/dev/null || true', dq, dq, dq, dq, dq, dstq));
+            staged_map(d) = dst;
+            keep_dirs{end+1} = dst;
+        end
+    else
+        keep_dirs{end+1} = d;
+    end
+end
+out_path = strjoin(keep_dirs, pathsep());
 
 
 end
