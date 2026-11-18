@@ -19,6 +19,9 @@ if nargin <= 12
     persistent cached_id S
     if isempty(cached_id) || cached_id ~= ctx_id
         S = load('-binary', ctx_file);
+        if ischar(S.ReturnFn_fh)
+            S.ReturnFn_fh = str2func(S.ReturnFn_fh);
+        end
         cached_id = ctx_id;
     end
 
@@ -67,7 +70,7 @@ if nargin <= 12
     end
 
     denom_pts = max(1, N_d_inner * N_a1 * max(1, N_a2) * max(1, N_e_slice));
-    blk_sz    = max(1, min(N_a1, floor(393216 / denom_pts)));
+    blk_sz    = max(1, min(N_a1, floor(2097152 / denom_pts)));
 
     z_first = floor((col_start - 1) / N_a1) + 1;
     z_last  = floor((col_end   - 1) / N_a1) + 1;
@@ -168,7 +171,7 @@ if sum(n_a2) > 0
 end
 
 denom_pts = max(1, N_d_inner * N_a1 * max(1, N_a2) * max(1, N_e_slice));
-blk_sz    = max(1, min(N_a1, floor(393216 / denom_pts)));
+blk_sz    = max(1, min(N_a1, floor(2097152 / denom_pts)));
 N_e_ev    = 1;
 if has_cont; N_e_ev = size(EV_chunk, 6); end
 

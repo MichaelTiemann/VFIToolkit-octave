@@ -30,6 +30,10 @@ addpath(fullfile(root_dir, 'shims', 'vfi'),    '-begin');
 addpath(fullfile(root_dir, 'shims', 'pool'),   '-begin');
 addpath(fullfile(root_dir, 'shims', 'matlab'), '-begin');
 
+if strncmp(pwd(), '/mnt/', 5)
+    ignore_function_time_stamp('all');
+end
+
 if nargin >= 1 && ~isempty(vectorized_fn_names)
     vfi_vectorized_registry('add', vectorized_fn_names);
 end

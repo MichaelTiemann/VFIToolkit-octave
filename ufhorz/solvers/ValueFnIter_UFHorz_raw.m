@@ -344,15 +344,24 @@ end % <--- MAIN FUNCTION ENDS HERE!
 % =========================================================================
 
 function fh_out = unwrap_passthrough_fn_local(fh_in)
+% Extracts 'TargetFn' from pure pass-through @(x,y)TargetFn(x,y) so Octave binary save
+% has zero closure overhead and hits the compiled .m symbol table directly.
+if ischar(fh_in)
+    fh_out = fh_in;
+    return;
+end
 if isa(fh_in, 'function_handle')
     s = strtrim(func2str(fh_in));
-    if ~isempty(s) && s(1) == '@'
-        tok = regexp(s, '^@\(([^)]*)\)\s*([A-Za-z]\w*)\(([^)]*)\)$', 'tokens', 'once');
+    if ~isempty(s) && s(1) ~= '@'
+        fh_out = s;
+        return;
+    elseif ~isempty(s)
+        tok = regexp(s, '^@\(([^)]*)\)\s*([A-Za-z]\w*)\s*\(([^)]*)\)$', 'tokens', 'once');
         if numel(tok) == 3
             lhs_args = regexprep(tok{1}, '\s+', '');
             rhs_args = regexprep(tok{3}, '\s+', '');
             if strcmp(lhs_args, rhs_args)
-                fh_out = str2func(tok{2});
+                fh_out = tok{2};
                 return;
             end
         end

@@ -53,8 +53,17 @@ switch lower(action)
         phys_cpus = detect_physical_cpus();
         if nargin < 2 || isempty(ncores); ncores = numel(phys_cpus); end
         if nargin < 3 || isempty(ram_dir); ram_dir = default_ram_dir; end
-        % Verify existing workers are actually alive before reusing pool
-        if active_ncores == ncores && strcmp(active_ram_dir, ram_dir) && workers_alive(ram_dir, ncores)
+        % Verify existing workers are actually alive AND have current vec_names before reusing pool
+        init_f = sprintf('%s/vfi_worker_init.bin', ram_dir);
+        vec_ok = false;
+        if exist(init_f, 'file')
+            try
+                S_chk = load('-binary', init_f, 'vec_names');
+                vec_ok = isequal(S_chk.vec_names, vfi_vectorized_registry('get'));
+            catch
+            end
+        end
+        if active_ncores == ncores && strcmp(active_ram_dir, ram_dir) && vec_ok && workers_alive(ram_dir, ncores)
             out = struct('active', true, 'ncores', active_ncores, 'ram_dir', active_ram_dir);
             return;
         end
@@ -108,7 +117,7 @@ switch lower(action)
             else
                 pin_prefix = '';
             end
-            cmd = sprintf('OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 %s"%s" --no-gui --no-history --quiet --eval "sigterm_dumps_octave_core(0); crash_dumps_octave_core(0); ignore_function_time_stamp(''all''); addpath(''%s''); persistent_worker(%d, ''%s'');" >"%s" 2>&1 & echo $!', ...
+            cmd = sprintf('OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 %s"%s" --no-gui --no-init-file --no-history --quiet --eval "warning(''off'',''all''); sigterm_dumps_octave_core(0); crash_dumps_octave_core(0); ignore_function_time_stamp(''all''); addpath(''%s''); persistent_worker(%d, ''%s'');" >"%s" 2>&1 & echo $!', ...
                 pin_prefix, oct_bin, pool_dir, w, ram_dir, log_file);
             [~, pid_str] = system(cmd);
             pids(w) = str2double(strtrim(pid_str));

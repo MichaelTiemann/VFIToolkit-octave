@@ -17,10 +17,13 @@ if nargin <= 12
     EV_sub            = varargin{11};
     z_off             = varargin{12};
 
-    persistent cached_raw_id S
-    if isempty(cached_raw_id) || cached_raw_id ~= ctx_id
+    persistent cached_id S
+    if isempty(cached_id) || cached_id ~= ctx_id
         S = load('-binary', ctx_file);
-        cached_raw_id = ctx_id;
+        if ischar(S.ReturnFn_fh)
+            S.ReturnFn_fh = str2func(S.ReturnFn_fh);
+        end
+        cached_id = ctx_id;
     end
 
     ReturnFn    = S.ReturnFn_fh;
