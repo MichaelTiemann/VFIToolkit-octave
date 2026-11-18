@@ -1,0 +1,312 @@
+function StationaryDist=StationaryDist_MixHorz_PType(jequaloneDist,AgeWeightsParamNames,PTypeDistParamNames,Policy,n_d,n_a,n_z,N_j,Names_i,pi_z,Parameters,simoptions)
+% Allows for different permanent (fixed) types of agent.
+% See ValueFnIter_Case1_FHorz_PType for general idea.
+%
+% simoptions.verbose=1 will give feedback
+% simoptions.verboseparams=1 will give further feedback on the param values of each permanent type
+%
+% jequaloneDist can either be same for all permanent types, or must be passed as a structure.
+% AgeWeightParamNames is either same for all permanent types, or must be passed as a structure.
+%
+%
+% How exactly to handle these differences between permanent (fixed) types
+% is to some extent left to the user. You can, for example, input
+% parameters that differ by permanent type as a vector with different rows f
+% for each type, or as a structure with different fields for each type.
+%
+% Any input that does not depend on the permanent type is just passed in
+% exactly the same form as normal.
+
+persistent infhorz_cache
+if isempty(infhorz_cache)
+    infhorz_cache = struct();
+end
+
+% Names_i can either be a cell containing the 'names' of the different
+% permanent types, or if there are no structures used (just parameters that
+% depend on permanent type and inputted as vectors or matrices as appropriate)
+% then Names_i can just be the number of permanent types (but does not have to be, can still be names).
+if iscell(Names_i)
+    N_i=length(Names_i);
+else
+    N_i=Names_i; % It is the number of PTypes (which have not been given names)
+    Names_i={'ptype001'};
+    for ii=2:N_i
+        if ii<10
+            Names_i{ii}=['ptype00',num2str(ii)];
+        elseif ii<100
+            Names_i{ii}=['ptype0',num2str(ii)];
+        elseif ii<1000
+            Names_i{ii}=['ptype',num2str(ii)];
+        end
+    end
+end
+
+%%
+if ~exist('simoptions','var')
+    error('You must input simoptions, you can always set simoptions=struct().')
+end
+
+%% Deal with jequaloneDist
+[jequaloneDist,Parameters]=jequaloneDist_PType(jequaloneDist,Parameters,simoptions,n_a,n_z,N_i,Names_i,PTypeDistParamNames);
+
+% The ptype masses are checked after jequaloneDist, because jequaloneDist with ptype as a dimension
+% overwrites them (its slice masses ARE the ptype masses), so it is these that get used.
+if abs(sum(Parameters.(PTypeDistParamNames{1}))-1)>10^(-12) % allowing for small numerical errors
+    warning('The permanent type mass weights must sum to one (PTypeDistParamNames points to weights that do not sum to one)')
+end
+
+pool_st = struct('active', false, 'ncores', 0, 'ram_dir', '');
+if exist('OCTAVE_VERSION', 'builtin') ~= 0 && exist('vfi_pool', 'file') ~= 0 ...
+        && (~isfield(simoptions, 'in_worker') || ~simoptions.in_worker)
+    pool_st = vfi_pool('status');
+end
+fhorz_jobs   = {};
+fhorz_idx    = [];
+fhorz_s_cpu  = [];
+
+%%
+for ii=1:N_i
+    iistr=Names_i{ii};
+    % First set up simoptions
+    simoptions_temp=PType_Options(simoptions,iistr);
+    if ~isfield(simoptions_temp,'verbose')
+        simoptions_temp.verbose=0;
+    end
+    if ~isfield(simoptions_temp,'verboseparams')
+        simoptions_temp.verboseparams=0;
+    end
+    if ~isfield(simoptions_temp,'ptypestorecpu')
+        simoptions_temp.ptypestorecpu=0; % GPU memory is limited, so switch solutions to the cpu. Off by default.
+    end
+
+    if simoptions_temp.verbose==1
+        fprintf('Permanent type: %i of %i \n',ii, N_i)
+    end
+
+
+    Policy_temp=Policy.(iistr);
+
+    % Go through everything which might be dependent on permanent type (PType)
+    % Notice that the way this is coded the grids (etc.) could be either
+    % fixed, or a function (that depends on age, and possibly on permanent
+    % type), or they could be a structure. Only in the case where they are
+    % a structure is there a need to take just a specific part and send
+    % only that to the 'non-PType' version of the command.
+    if isa(n_d,'struct')
+        n_d_temp=n_d.(iistr);
+    else
+        n_d_temp=n_d;
+    end
+    if isa(n_a,'struct')
+        n_a_temp=n_a.(iistr);
+    else
+        n_a_temp=n_a;
+    end
+    if isa(n_z,'struct')
+        n_z_temp=n_z.(iistr);
+    else
+        n_z_temp=n_z;
+    end
+    if isa(N_j,'struct')
+        N_j_temp=N_j.(iistr);
+    else
+        N_j_temp=N_j;
+    end
+
+    %% Exogenous shocks
+    if isstruct(pi_z)
+        pi_z_temp=pi_z.(iistr);
+    else
+        nn=size(pi_z,ndims(pi_z));
+        if nn==N_i
+            otherdims = repmat({':'},1,ndims(pi_z)-1);
+            pi_z_temp=pi_z(otherdims{:},ii);
+        else
+            pi_z_temp=pi_z;
+        end
+    end
+
+    % e
+    if prod(simoptions_temp.n_e)>0
+        % If vfoptions_temp.pi_semiz is a structure that was already dealt with by PType_Options() command
+        if ~isstruct(simoptions.pi_e)
+            % So just need to check if last dimension is of length N_i
+            nn=size(simoptions_temp.pi_e,ndims(simoptions_temp.pi_e));
+            if nn==N_i
+                otherdims = repmat({':'},1,ndims(simoptions_temp.pi_e)-1);
+                simoptions_temp.pi_e=simoptions_temp.pi_e(otherdims{:},ii);
+            end
+        end
+    end
+
+    % semiz
+    if prod(simoptions_temp.n_semiz)>0
+        % Might use SemiExoShockFn or pi_semiz, if the later we need to deal with it
+        if isfield(simoptions_temp,'pi_semiz')
+        % If simoptions_temp.pi_semiz is a structure that was already dealt with by PType_Options() command
+            if ~isstruct(simoptions.pi_semiz)
+                % So just need to check if last dimension is of length N_i
+                nn=size(simoptions_temp.pi_semiz,ndims(simoptions_temp.pi_semiz));
+                if nn==N_i
+                    otherdims = repmat({':'},1,ndims(simoptions_temp.pi_semiz)-1);
+                    simoptions_temp.pi_semiz=simoptions_temp.pi_semiz(otherdims{:},ii);
+                end
+            end
+        else
+            % To evaluate SemiExoShockFn, we still require semiz_grid
+            % If vfoptions_temp.semiz_grid is a structure that was already dealt with by PType_Options() command
+            if ~isstruct(simoptions.semiz_grid)
+                % So just need to check if last dimension is of length N_i
+                nn=size(simoptions_temp.semiz_grid,ndims(simoptions_temp.semiz_grid));
+                if nn==N_i
+                    otherdims = repmat({':'},1,ndims(simoptions_temp.semiz_grid)-1);
+                    simoptions_temp.semiz_grid=simoptions_temp.semiz_grid(otherdims{:},ii);
+                end
+            end
+        end
+    end
+
+    %% Parameters
+    % Parameters are allowed to be given as structure, or as vector/matrix
+    % (in terms of their dependence on fixed type). So go through each of
+    % these in term.
+    Parameters_temp=Parameters;
+    FullParamNames=fieldnames(Parameters);
+    nFields=length(FullParamNames);
+    for kField=1:nFields
+        if isa(Parameters.(FullParamNames{kField}), 'struct') % Check for permanent type in structure form
+            names=fieldnames(Parameters.(FullParamNames{kField}));
+            for jj=1:length(names)
+                if strcmp(names{jj},Names_i{ii})
+                    Parameters_temp.(FullParamNames{kField})=Parameters.(FullParamNames{kField}).(names{jj});
+                end
+            end
+        elseif any(size(Parameters.(FullParamNames{kField}))==N_i) % Check for permanent type in vector/matrix form.
+            temp=Parameters.(FullParamNames{kField});
+            [~,ptypedim]=max(size(Parameters.(FullParamNames{kField}))==N_i); % Parameters as vector/matrix can be at most two dimensional, figure out which relates to PType.
+            if ptypedim==1
+                Parameters_temp.(FullParamNames{kField})=temp(ii,:);
+            elseif ptypedim==2
+                Parameters_temp.(FullParamNames{kField})=temp(:,ii);
+            end
+        end
+    end
+
+    if simoptions_temp.verboseparams==1
+        sprintf('Parameter values for the current permanent type')
+        Parameters_temp
+    end
+
+    %% jequaloneDist
+    if isa(jequaloneDist,'struct')
+        if isfield(jequaloneDist,Names_i{ii})
+            jequaloneDist_temp=jequaloneDist.(iistr);
+            % jequaloneDist_temp must be of mass one for the codes to work.
+            if abs(sum(jequaloneDist_temp(:))-1)>10^(-12) % jequaloneDist_temp(:))~=1, but allowing for small numerical errors (same tolerance as the non-structure form below; a ptype-as-a-dimension input reaches here after jequaloneDist_PType normalized each slice, so it is only accurate to rounding error)
+                fprintf('Info for following error: sum(jequaloneDist_temp(:))-1=%8.16f (should be zero) \n', sum(jequaloneDist_temp(:))-1)
+                error(['The jequaloneDist must be of mass one for each type i (it is not for type ',Names_i{ii}])
+            end
+        else
+            if isfinite(N_j_temp)
+                error(['You must input a jequaloneDist for permanent type ', Names_i{ii}, ' \n'])
+            end
+            jequaloneDist_temp=[];
+        end
+    else
+        % Note: when jequaloneDist is not a structure all ptypes must have the same grids
+        % (jequaloneDist_PType has already converted any ptype-as-a-dimension input into the struct
+        % form, so here jequaloneDist can only be the same distribution for every ptype)
+        jequaloneDist_temp=jequaloneDist;
+        if abs(sum(jequaloneDist_temp(:))-1)>10^(-12)
+            error(['The jequaloneDist must be of mass one for each type i (it is not for type ',Names_i{ii}, ' \n'])
+        end
+    end
+
+    %%
+    AgeWeightParamNames_temp=AgeWeightsParamNames;
+    if isa(AgeWeightsParamNames,'struct')
+        if isfield(AgeWeightsParamNames,Names_i{ii})
+            AgeWeightParamNames_temp=AgeWeightsParamNames.(iistr);
+        else
+            if isfinite(N_j_temp)
+                error(['You must input AgeWeightParamNames for permanent type ', Names_i{ii}, ' \n'])
+            end
+        end
+    end
+
+    if isfinite(N_j_temp)
+        if pool_st.active && pool_st.ncores > 1
+            simoptions_temp.in_worker = true;
+            fhorz_idx(end+1)   = ii; %#ok<AGROW>
+            fhorz_s_cpu(end+1) = simoptions_temp.ptypestorecpu; %#ok<AGROW>
+            fhorz_jobs{end+1}  = {jequaloneDist_temp, AgeWeightParamNames_temp, Policy_temp, ...
+                n_d_temp, n_a_temp, n_z_temp, N_j_temp, pi_z_temp, Parameters_temp, simoptions_temp}; %#ok<AGROW>
+            continue;
+        end
+        StationaryDist_ii=StationaryDist_FHorz_Case1(jequaloneDist_temp,AgeWeightParamNames_temp,Policy_temp,n_d_temp,n_a_temp,n_z_temp,N_j_temp,pi_z_temp,Parameters_temp,simoptions_temp);
+    else % PType actually allows for infinite horizon as well
+        % Memoize infinite-horizon stationary dist when (Policy, pi_z, grids) are unchanged across outer loops
+        pol_cpu = double(gather(Policy_temp(:)));
+        piz_cpu = double(gather(pi_z_temp(:)));
+        if isfield(infhorz_cache, iistr) ...
+                && isequal(infhorz_cache.(iistr).pol, pol_cpu) ...
+                && isequal(infhorz_cache.(iistr).piz, piz_cpu) ...
+                && isequal(infhorz_cache.(iistr).nd, n_d_temp) ...
+                && isequal(infhorz_cache.(iistr).na, n_a_temp) ...
+                && isequal(infhorz_cache.(iistr).nz, n_z_temp)
+            StationaryDist_ii = infhorz_cache.(iistr).dist;
+        else
+            StationaryDist_ii=StationaryDist_InfHorz(Policy_temp,n_d_temp,n_a_temp,n_z_temp,pi_z_temp,simoptions_temp,Parameters_temp); % EntryExitParams not yet supported (is on my to-do list)
+            infhorz_cache.(iistr) = struct('pol', pol_cpu, 'piz', piz_cpu, ...
+                'nd', n_d_temp, 'na', n_a_temp, 'nz', n_z_temp, 'dist', StationaryDist_ii);
+        end
+    end
+
+    if simoptions_temp.ptypestorecpu==1
+        StationaryDist.(iistr)=gather(StationaryDist_ii);
+    else
+        StationaryDist.(iistr)=StationaryDist_ii;
+    end
+
+end
+
+% Dispatch collected finite-horizon PTypes concurrently across persistent Octave workers
+if ~isempty(fhorz_jobs)
+    K_fh = numel(fhorz_jobs);
+    if K_fh == 1
+        jb = fhorz_jobs{1};
+        StationaryDist_ii = StationaryDist_FHorz_Case1(jb{:});
+        if fhorz_s_cpu(1) == 1
+            StationaryDist.(Names_i{fhorz_idx(1)}) = gather(StationaryDist_ii);
+        else
+            StationaryDist.(Names_i{fhorz_idx(1)}) = StationaryDist_ii;
+        end
+    else
+        for k = 1:K_fh
+            so = fhorz_jobs{k}{10};
+            if isfield(so, 'aprimeFn') && isa(so.aprimeFn, 'function_handle')
+                so.aprimeFn_str = func2str(so.aprimeFn);
+                so = rmfield(so, 'aprimeFn');
+                fhorz_jobs{k}{10} = so;
+            end
+        end
+        w_res = vfi_dispatch_chunks('statdist_fhorz_ptype_worker', fhorz_jobs, pool_st.ram_dir, 1);
+        for k = 1:K_fh
+            if fhorz_s_cpu(k) == 1
+                StationaryDist.(Names_i{fhorz_idx(k)}) = gather(w_res{k, 1});
+            else
+                StationaryDist.(Names_i{fhorz_idx(k)}) = w_res{k, 1};
+            end
+        end
+    end
+end
+
+if length(Parameters.(PTypeDistParamNames{:}))==N_i
+    StationaryDist.ptweights=reshape(Parameters.(PTypeDistParamNames{:}),[],1); % reshape is to make sure this is a column vector
+else
+    error('Parameter for PTypeDistParamNames does not have the same number of permanent types as N_i/Names_i \n')
+end
+
+
+end

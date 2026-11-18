@@ -14,4 +14,6 @@ if is_supported
 else
     error('StationaryDist_FHorz_Case1: unsupported simoptions combination in VFIToolkit-octave fast path');
 end
+
+
 end

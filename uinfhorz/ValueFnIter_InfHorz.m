@@ -66,10 +66,14 @@ beta = prod(CreateVectorFromParams(Parameters, DiscountFactorParamNames));
 RM = CreateReturnFnMatrix_UDisc(ReturnFn, spec_n_d, n_a, spec_n_z, 0, d_gridvals, a_grid, z_gridvals, [], ReturnFnParamsVec, 0);
 N_choice = max(N_d, 1) * N_a;
 RM = reshape(RM, [N_choice, N_a, N_z]);
+if has_d && N_d > 1
+    RM_4D = reshape(RM, [N_d, N_a, N_a, N_z]);
+end
 
 VKron = zeros(N_a, N_z, 'gpuArray');
 PolicyKron = ones(N_a, N_z, 'gpuArray');
 pi_z_T = pi_z';
+has_piz_pos = double(pi_z_T > 0);
 
 az_offset = N_choice * ((0:(N_a * N_z - 1))');
 z_offset_ev = N_a * repelem((0:(N_z - 1))', N_a, 1);
@@ -79,20 +83,20 @@ howard_steps = vfoptions.howards;
 
 for iter = 1:vfoptions.maxiter
     EV_inf = (VKron == -Inf);
-    V_safe = VKron;
-    V_safe(EV_inf) = -1e250;
-    EV = V_safe * pi_z_T;
     if any(EV_inf(:))
-        EV((double(EV_inf) * double(pi_z_T > 0)) > 0) = -Inf;
-    end
-
-    if has_d
-        EV_expanded = repelem(reshape(EV, [N_a, 1, N_z]), N_d, 1, 1);
+        V_safe = VKron;
+        V_safe(EV_inf) = 0;
+        EV = V_safe * pi_z_T;
+        EV((double(EV_inf) * has_piz_pos) > 0) = -Inf;
     else
-        EV_expanded = reshape(EV, [N_a, 1, N_z]);
+        EV = VKron * pi_z_T;
     end
 
-    entireRHS = RM + beta * EV_expanded;
+    if has_d && N_d > 1
+        entireRHS = reshape(RM_4D + reshape(beta * EV, [1, N_a, 1, N_z]), [N_choice, N_a, N_z]);
+    else
+        entireRHS = RM + reshape(beta * EV, [N_a, 1, N_z]);
+    end
     [V_new, Pol_new] = max(entireRHS, [], 1);
     V_new   = reshape(V_new,   [N_a, N_z]);
     Pol_new = reshape(Pol_new, [N_a, N_z]);
@@ -114,20 +118,30 @@ for iter = 1:vfoptions.maxiter
 
     if iter <= vfoptions.maxhowards && howard_steps > 0
         F_pol = reshape(RM(Pol_new(:) + az_offset), [N_a, N_z]);
-        if all(isfinite(F_pol(:)))
-            if has_d
-                ap_pol = ceil(Pol_new(:) / N_d);
-            else
-                ap_pol = Pol_new(:);
-            end
-            ev_lin_idx = ap_pol + z_offset_ev;
-            V_how = VKron;
+        if has_d
+            ap_pol = ceil(Pol_new(:) / N_d);
+        else
+            ap_pol = Pol_new(:);
+        end
+        ev_lin_idx = ap_pol + z_offset_ev;
+        V_how = VKron;
+        if all(isfinite(F_pol(:))) && ~any(EV_inf(:))
             for h_it = 1:howard_steps
                 EV_h = V_how * pi_z_T;
                 V_how = F_pol + beta * reshape(EV_h(ev_lin_idx), [N_a, N_z]);
             end
-            VKron = V_how;
+        elseif any(isfinite(F_pol(:)))
+            % Keep Howard acceleration active on finite states even if boundary states have -Inf
+            for h_it = 1:howard_steps
+                Vh_inf = ~isfinite(V_how);
+                Vh_safe = V_how;
+                Vh_safe(Vh_inf) = 0;
+                EV_h = Vh_safe * pi_z_T;
+                EV_h((double(Vh_inf) * has_piz_pos) > 0) = -Inf;
+                V_how = F_pol + beta * reshape(EV_h(ev_lin_idx), [N_a, N_z]);
+            end
         end
+        VKron = V_how;
     end
 end
 
@@ -178,5 +192,6 @@ else
         a_cum = a_cum * n_a(i);
     end
 end
+
 
 end

@@ -25,15 +25,6 @@ func_str = func2str(ReturnFn);
 % 2. Check persistent registry first, then caller/base vfoptions.vectorizedarrayfunnames
 vectorized_names = vfi_vectorized_registry('get');
 
-if evalin('base', "exist('vfoptions', 'var')")
-    vfoptions_base = evalin('base', 'vfoptions');
-    if isstruct(vfoptions_base) && isfield(vfoptions_base, 'vectorizedarrayfunnames')
-        vn = vfoptions_base.vectorizedarrayfunnames;
-        if ischar(vn); vn = {vn}; end
-        vectorized_names = [vectorized_names, vn(:)'];
-    end
-end
-
 is_vectorized = false;
 if ~isempty(vectorized_names)
     if any(strcmp(vectorized_names, 'FORCE_VECTORIZED'))
@@ -41,6 +32,20 @@ if ~isempty(vectorized_names)
     else
         for ii = 1:numel(vectorized_names)
             if ~isempty(vectorized_names{ii}) && ~isempty(strfind(func_str, vectorized_names{ii}))
+                is_vectorized = true;
+                break;
+            end
+        end
+    end
+end
+
+if ~is_vectorized && evalin('base', "exist('vfoptions', 'var')")
+    vfoptions_base = evalin('base', 'vfoptions');
+    if isstruct(vfoptions_base) && isfield(vfoptions_base, 'vectorizedarrayfunnames')
+        vn = vfoptions_base.vectorizedarrayfunnames;
+        if ischar(vn); vn = {vn}; end
+        for ii = 1:numel(vn)
+            if ~isempty(vn{ii}) && ~isempty(strfind(func_str, vn{ii}))
                 is_vectorized = true;
                 break;
             end
@@ -82,5 +87,6 @@ if is_vectorized
 else
     varargout{1} = arrayfun_expand(ReturnFn, varargin{:});
 end
+
 
 end
