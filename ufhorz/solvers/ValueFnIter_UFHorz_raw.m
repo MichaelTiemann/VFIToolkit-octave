@@ -107,11 +107,6 @@ for j = N_j:-1:1
     ReturnFnParamsVec = CreateVectorFromParams(Parameters, ReturnFnParamNames, j);
     df = prod(CreateVectorFromParams(Parameters, DiscountFactorParamNames, j));
 
-    if j == N_j && N_j == 8
-        fprintf('  [UFHorz j=N_j=8] has_VJ1=%d | has_cont=%d | df=%.6f | size_piz=%s\n', ...
-            isfield(vfoptions, 'V_Jplus1'), has_cont, df, mat2str(size(pi_z_J)));
-        fflush(stdout);
-    end
     if ez_flag
         if Dims.EZoneminusbeta == 1
             ezc1_j = 1 - df;

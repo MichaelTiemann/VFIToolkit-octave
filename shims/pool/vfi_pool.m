@@ -9,18 +9,44 @@ if nargin < 1 || isempty(action)
     action = 'status';
 end
 
-% Determine OS-appropriate default RAM directory (/dev/shm for Linux/WSL, /Volumes for macOS)
+% Determine OS-appropriate default RAM directory (/dev/shm/vfi_<user> for Linux/WSL, /Volumes for macOS)
 if ispc()
     default_ram_dir = fullfile(tempdir, 'VFI_RAMDisk');
 elseif ismac()
     default_ram_dir = '/Volumes/VFI_RAMDisk';
 else
-    % Linux / WSL
-    default_ram_dir = '/dev/shm/VFI_RAMDisk';
+    % Linux / WSL: match per-user /dev/shm/vfi_<user> convention
+    usr = getenv('USER');
+    if isempty(usr); usr = 'octave'; end
+    default_ram_dir = sprintf('/dev/shm/vfi_%s', usr);
+end
+
+% Recover persistent state if 'clear functions' wiped persistent variables while workers are running
+if active_ncores == 0
+    for cand_dir = {default_ram_dir, '/dev/shm/VFI_RAMDisk'}
+        pid_f = sprintf('%s/vfi_worker_pids.txt', cand_dir{1});
+        if exist(pid_f, 'file')
+            try
+                pids_chk = dlmread(pid_f);
+                if ~isempty(pids_chk) && pids_chk(1) > 0 && kill(pids_chk(1), 0) == 0
+                    active_ncores  = numel(pids_chk);
+                    active_ram_dir = cand_dir{1};
+                    break;
+                end
+            catch
+            end
+        end
+    end
 end
 
 switch lower(action)
     case 'status'
+        if active_ncores > 0 && ~workers_alive(active_ram_dir, active_ncores)
+            fprintf('  [vfi_pool] Workers no longer alive; restarting %d workers on %s...\n', active_ncores, active_ram_dir);
+            fflush(stdout);
+            out = vfi_pool('start', active_ncores, active_ram_dir);
+            return;
+        end
         out = struct('active', active_ncores > 0, 'ncores', active_ncores, 'ram_dir', active_ram_dir);
 
     case 'ensure'
@@ -76,13 +102,13 @@ switch lower(action)
             % Set threading variables for cross-platform support (Linux/OpenBLAS + macOS/Accelerate)
             log_file = sprintf('%s/worker_%d.log', ram_dir, w);
             if ~ismac() && ~ispc()
-                % Pin worker w to unique physical core primary thread (avoids WSL2/Linux interleaved SMT pairs!)
+                % Pin worker w to unique physical core primary thread & detach PGID via setsid so Ctrl+C in master doesn't kill pool
                 cpu_id = phys_cpus(mod(w - 1, numel(phys_cpus)) + 1);
-                pin_prefix = sprintf('taskset -c %d ', cpu_id);
+                pin_prefix = sprintf('setsid taskset -c %d ', cpu_id);
             else
                 pin_prefix = '';
             end
-            cmd = sprintf('OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 %s"%s" --no-gui --no-history --quiet --eval "ignore_function_time_stamp(''all''); addpath(''%s''); persistent_worker(%d, ''%s'');" >"%s" 2>&1 & echo $!', ...
+            cmd = sprintf('OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 %s"%s" --no-gui --no-history --quiet --eval "sigterm_dumps_octave_core(0); crash_dumps_octave_core(0); ignore_function_time_stamp(''all''); addpath(''%s''); persistent_worker(%d, ''%s'');" >"%s" 2>&1 & echo $!', ...
                 pin_prefix, oct_bin, pool_dir, w, ram_dir, log_file);
             [~, pid_str] = system(cmd);
             pids(w) = str2double(strtrim(pid_str));
@@ -203,7 +229,7 @@ system('pkill -f "persistent_worker\(" >/dev/null 2>&1 || true');
 pause(0.05);
 system('pkill -9 -f "persistent_worker\(" >/dev/null 2>&1 || true');
 if exist(ram_dir, 'dir')
-    system(sprintf('rm -f "%s"/vfi_worker_* >/dev/null 2>&1 || true', ram_dir));
+    system(sprintf('rm -f "%s"/vfi_* "%s"/worker_*.log >/dev/null 2>&1 || true', ram_dir, ram_dir));
 end
 
 
