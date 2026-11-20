@@ -25,8 +25,9 @@ if isempty(ReturnFnParamNames)
 end
 
 % --- 2. Preallocate Outputs & Persistent Worker Context ---
-V      = zeros(N_a, N_bothz, N_e, N_j, 'gpuArray');
-Policy = zeros(1, N_a, N_bothz, N_e, N_j, 'gpuArray');
+% Note that we wrap gpuArray around zeros(...) because zeros(..., 'gpuArray') is hijacked by MATLAB's JIT
+V      = vfi_gpu(zeros(N_a, N_bothz, N_e, N_j));
+Policy = vfi_gpu(zeros(1, N_a, N_bothz, N_e, N_j));
 
 pool_st = struct('active', false, 'ncores', 0, 'ram_dir', '');
 if exist('OCTAVE_VERSION', 'builtin') ~= 0 && exist('vfi_pool', 'file') ~= 0 ...
@@ -60,28 +61,28 @@ if use_pool
 end
 
 if qh_mode > 0
-    Valt = zeros(N_a, N_bothz, N_e, N_j, 'gpuArray');
+    Valt = vfi_gpu(zeros(N_a, N_bothz, N_e, N_j));
 else
     Valt = [];
 end
 if qh_mode == 1
-    Policyalt = zeros(1, N_a, N_bothz, N_e, N_j, 'gpuArray');
+    Policyalt = vfi_gpu(zeros(1, N_a, N_bothz, N_e, N_j));
 else
     Policyalt = [];
 end
 
 if qh_mode == 2
-    bz_off_soph = N_a * reshape(gpuArray(0:1:N_z_slice-1), [1, 1, N_z_slice, 1]);
+    bz_off_soph = N_a * reshape(vfi_gpu(0:1:N_z_slice-1), [1, 1, N_z_slice, 1]);
 end
 
 if N_d_outer > 1
-    V_fordouter = zeros(N_a, N_bothz, N_e, N_d_outer, 'gpuArray');
-    P_fordouter = zeros(N_a, N_bothz, N_e, N_d_outer, 'gpuArray');
+    V_fordouter = vfi_gpu(zeros(N_a, N_bothz, N_e, N_d_outer));
+    P_fordouter = vfi_gpu(zeros(N_a, N_bothz, N_e, N_d_outer));
     if qh_mode > 0
-        Valt_fordouter = zeros(N_a, N_bothz, N_e, N_d_outer, 'gpuArray');
+        Valt_fordouter = vfi_gpu(zeros(N_a, N_bothz, N_e, N_d_outer));
     end
     if qh_mode == 1
-        Palt_fordouter = zeros(N_a, N_bothz, N_e, N_d_outer, 'gpuArray');
+        Palt_fordouter = vfi_gpu(zeros(N_a, N_bothz, N_e, N_d_outer));
     end
 end
 
@@ -329,7 +330,7 @@ for j = N_j:-1:1
     if N_d_outer > 1
         [V(:,:,:,j), Policy(:,:,:,:,j), max_d_out] = extract_pol_local(V_fordouter, P_fordouter, N_a, N_bothz, N_e);
         if qh_mode == 2
-            lin_idx = gpuArray(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
+            lin_idx = vfi_gpu(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
             Valt(:,:,:,j) = reshape(Valt_fordouter(lin_idx), [N_a, N_bothz, N_e]);
         elseif qh_mode == 1
             [Valt(:,:,:,j), Policyalt(:,:,:,:,j)] = extract_pol_local(Valt_fordouter, Palt_fordouter, N_a, N_bothz, N_e);
@@ -418,7 +419,7 @@ end
 
 function [V_j, Pol_j, max_d_out] = extract_pol_local(V_fordouter, P_fordouter, N_a, N_bothz, N_e)
 [V_j, max_d_out] = max(V_fordouter, [], 4);
-lin_idx = gpuArray(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
+lin_idx = vfi_gpu(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
 Pol_j = reshape(P_fordouter(lin_idx), [1, N_a, N_bothz, N_e]);
 end
 

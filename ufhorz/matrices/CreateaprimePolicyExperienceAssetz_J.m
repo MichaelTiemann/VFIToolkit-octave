@@ -146,43 +146,43 @@ if fastOLG==0 % state order (a, semiz, z, e, j)
     %% expassetz_J: aprime(d, a2, z)
     if l_z==1
         if l_dexp==1
-            a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, z1vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, z1vals, ParamCell{:});
         elseif l_dexp==2
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals, ParamCell{:});
         elseif l_dexp==3
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals, ParamCell{:});
         elseif l_dexp==4
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals, ParamCell{:});
         end
     elseif l_z==2
         if l_dexp==1
-            a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals, ParamCell{:});
         elseif l_dexp==2
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals, ParamCell{:});
         elseif l_dexp==3
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals, ParamCell{:});
         elseif l_dexp==4
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals, ParamCell{:});
         end
     elseif l_z==3
         if l_dexp==1
-            a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
         elseif l_dexp==2
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
         elseif l_dexp==3
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
         elseif l_dexp==4
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
         end
     elseif l_z==4
         if l_dexp==1
-            a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
         elseif l_dexp==2
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
         elseif l_dexp==3
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
         elseif l_dexp==4
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
         end
     end
 
@@ -307,43 +307,43 @@ elseif fastOLG==1 % state order (a, j, semiz, z, e)
     %% expassetz_J: aprime(d, a2, z)
     if l_z==1
         if l_dexp==1
-            a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, z1vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, z1vals, ParamCell{:});
         elseif l_dexp==2
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals, ParamCell{:});
         elseif l_dexp==3
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals, ParamCell{:});
         elseif l_dexp==4
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals, ParamCell{:});
         end
     elseif l_z==2
         if l_dexp==1
-            a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals, ParamCell{:});
         elseif l_dexp==2
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals, ParamCell{:});
         elseif l_dexp==3
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals, ParamCell{:});
         elseif l_dexp==4
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals, ParamCell{:});
         end
     elseif l_z==3
         if l_dexp==1
-            a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
         elseif l_dexp==2
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
         elseif l_dexp==3
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
         elseif l_dexp==4
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals,z3vals, ParamCell{:});
         end
     elseif l_z==4
         if l_dexp==1
-            a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
         elseif l_dexp==2
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
         elseif l_dexp==3
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
         elseif l_dexp==4
-            a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
+            a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, z1vals,z2vals,z3vals,z4vals, ParamCell{:});
         end
     end
 

@@ -37,7 +37,7 @@ if l_a2 == 1
     end
     if isempty(state_dims); state_dims = 1; end
 
-    a2primeVals = arrayfun(aprimeFn, GridParamsCell{:}, ParamCell{:});
+    a2primeVals = vfi_arrayfun(aprimeFn, GridParamsCell{:}, ParamCell{:});
     [a2primeIndexes, a2primeProbs] = interp_1d_local(a2primeVals(:), a2_grid(:));
 
     if aprimeIndexAsColumn == 1
@@ -82,8 +82,8 @@ elseif l_a2 == 2
     if isempty(state_dims); state_dims = 1; end
 
     % Evaluate aprimeFn for each experience asset dimension using whicha = 1 and whicha = 2
-    a2primeVals_1 = arrayfun(aprimeFn, GridParamsCell{:}, 1, exog_Cells{:}, ParamCell{:});
-    a2primeVals_2 = arrayfun(aprimeFn, GridParamsCell{:}, 2, exog_Cells{:}, ParamCell{:});
+    a2primeVals_1 = vfi_arrayfun(aprimeFn, GridParamsCell{:}, 1, exog_Cells{:}, ParamCell{:});
+    a2primeVals_2 = vfi_arrayfun(aprimeFn, GridParamsCell{:}, 2, exog_Cells{:}, ParamCell{:});
 
     [idx_1, prob_1] = interp_1d_local(a2primeVals_1(:), a2_grid_1(:));
     [idx_2, prob_2] = interp_1d_local(a2primeVals_2(:), a2_grid_2(:));

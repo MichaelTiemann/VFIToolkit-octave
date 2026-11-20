@@ -42,7 +42,7 @@ if sum(n_e) > 0
     for i = 1:size(e_grid, 2); GridParamsCell{end+1} = shiftdim(e_grid(:, i), -(2*l_a + 2)); end
 end
 
-Fmatrix = arrayfun(ReturnFn, GridParamsCell{:}, ReturnFnParamsCell{:});
+Fmatrix = vfi_arrayfun(ReturnFn, GridParamsCell{:}, ReturnFnParamsCell{:});
 
 % Reshape output array
 if sum(n_d) == 0

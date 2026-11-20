@@ -19,7 +19,7 @@ if ~isempty(EVpre_flat)
         end
         N_d_exp  = size(a2p_idx_base, 1);
         N_a2_exp = size(a2p_idx_base, 2);
-        a1_base  = repelem(gpuArray(1:1:N_a1)', N_d_exp, N_a2_exp);
+        a1_base  = repelem(vfi_gpu(1:1:N_a1)', N_d_exp, N_a2_exp);
         idx_lo   = a1_base + N_a1 * repmat(a2p_idx_base - 1, N_a1, 1);
         idx_hi   = a1_base + N_a1 * repmat(a2p_idx_base,     N_a1, 1);
         Vlower   = reshape(EV_z(idx_lo(:), :), [N_d_exp*N_a1, N_a2_exp, N_bothz]);
@@ -96,7 +96,7 @@ if length(n_a2) == 1
         N_3rd = N_bothz;
     end
 
-    a1_base  = repelem(gpuArray(1:1:N_a1)', N_d_exp, N_a2_exp, N_3rd);
+    a1_base  = repelem(vfi_gpu(1:1:N_a1)', N_d_exp, N_a2_exp, N_3rd);
     idx_lo   = a1_base + N_a1 * repmat(a2p_idx_base - 1, N_a1, 1, 1);
     idx_hi   = a1_base + N_a1 * repmat(a2p_idx_base,     N_a1, 1, 1);
     prob_exp = repmat(a2p_weight_base, N_a1, 1, 1, N_bothz);
@@ -126,7 +126,7 @@ else
         N_3rd = N_bothz;
     end
 
-    a1_base = repelem(gpuArray(1:1:N_a1)', N_d_exp, N_a2_exp, N_3rd);
+    a1_base = repelem(vfi_gpu(1:1:N_a1)', N_d_exp, N_a2_exp, N_3rd);
     n_a2_1  = n_a2(1);
 
     idx_ll = a1_base + N_a1 * repmat(loIdx_1 + n_a2_1*(loIdx_2-1) - 1,     N_a1, 1, 1);
@@ -159,7 +159,7 @@ else
 end
 
 if Dims.exp_flag == 6
-    pi_u = shiftdim(gpuArray(vfoptions.pi_u), -2);
+    pi_u = shiftdim(vfi_gpu(vfoptions.pi_u), -2);
     EV = squeeze(sum(EV_u .* pi_u, 3));
     EV = EV .* shiftdim(pi_bz', -2);
     EV(isnan(EV)) = 0;

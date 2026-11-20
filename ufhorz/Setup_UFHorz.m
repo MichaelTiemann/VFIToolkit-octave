@@ -198,7 +198,7 @@ end
 
 % --- 7. Synthesized Grids (d12_gridvals, bothz_gridvals_J, ExpAsset & RiskyAsset grids) ---
 if Dims.risky_flag
-    d_grid = gpuArray(vfoptions.d_grid(:));
+    d_grid = vfi_gpu(vfoptions.d_grid(:));
     s1 = sum(Dims.n_d1(Dims.n_d1 > 0));
     s2 = s1 + sum(Dims.n_d2(Dims.n_d2 > 0));
     s3 = s2 + sum(Dims.n_d3(Dims.n_d3 > 0));
@@ -218,13 +218,13 @@ if Dims.risky_flag
     end
 
     if sum(Dims.n_a1) > 0
-        if sum(Dims.n_a1) > 0; Grids.a1_gridvals = CreateGridvals(Dims.n_a1, gpuArray(vfoptions.a1_grid), 1); else; Grids.a1_gridvals = gpuArray([]); end
+        if sum(Dims.n_a1) > 0; Grids.a1_gridvals = CreateGridvals(Dims.n_a1, vfi_gpu(vfoptions.a1_grid), 1); else; Grids.a1_gridvals = vfi_gpu([]); end
     else
-        Grids.a1_gridvals = gpuArray([]);
+        Grids.a1_gridvals = vfi_gpu([]);
     end
-    Grids.a2_grid     = gpuArray(vfoptions.a2_grid(:));
+    Grids.a2_grid     = vfi_gpu(vfoptions.a2_grid(:));
     Grids.a2_gridvals = CreateGridvals(Dims.n_a2, Grids.a2_grid, 1);
-    Grids.u_gridvals  = CreateGridvals(vfoptions.n_u, gpuArray(vfoptions.u_grid), 1);
+    Grids.u_gridvals  = CreateGridvals(vfoptions.n_u, vfi_gpu(vfoptions.u_grid), 1);
     Dims.N_u          = max(prod(vfoptions.n_u), 1);
 
     l_d23_len = length(Dims.n_d23(Dims.n_d23 > 0));
@@ -252,11 +252,11 @@ else
 end
 
 if Dims.exp_flag > 0
-    if sum(Dims.n_a1) > 0; Grids.a1_gridvals = CreateGridvals(Dims.n_a1, gpuArray(vfoptions.a1_grid), 1); else; Grids.a1_gridvals = gpuArray([]); end
-    Grids.a2_gridvals = CreateGridvals(Dims.n_a2, gpuArray(vfoptions.a2_grid), 1);
-    Grids.d2_gridvals = CreateGridvals(Dims.n_d2, gpuArray(vfoptions.d2_grid), 1);
+    if sum(Dims.n_a1) > 0; Grids.a1_gridvals = CreateGridvals(Dims.n_a1, vfi_gpu(vfoptions.a1_grid), 1); else; Grids.a1_gridvals = vfi_gpu([]); end
+    Grids.a2_gridvals = CreateGridvals(Dims.n_a2, vfi_gpu(vfoptions.a2_grid), 1);
+    Grids.d2_gridvals = CreateGridvals(Dims.n_d2, vfi_gpu(vfoptions.d2_grid), 1);
     if Dims.exp_flag == 6
-        Grids.u_gridvals = CreateGridvals(vfoptions.n_u, gpuArray(vfoptions.u_grid), 1);
+        Grids.u_gridvals = CreateGridvals(vfoptions.n_u, vfi_gpu(vfoptions.u_grid), 1);
     end
 
     l_d2_len = length(Dims.n_d2); if sum(Dims.n_d2) == 0; l_d2_len = 0; end

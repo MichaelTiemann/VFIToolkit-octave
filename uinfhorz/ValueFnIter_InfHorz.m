@@ -22,9 +22,9 @@ N_z = prod(n_z);
 has_d = (N_d > 0);
 has_z = (N_z > 0);
 
-a_grid = gpuArray(a_grid(:));
+a_grid = vfi_gpu(a_grid(:));
 if has_d
-    d_grid = gpuArray(d_grid(:));
+    d_grid = vfi_gpu(d_grid(:));
     d_gridvals = CreateGridvals(n_d, d_grid, 1);
     spec_n_d = n_d;
 else
@@ -33,11 +33,11 @@ else
 end
 
 if has_z
-    pi_z = gpuArray(pi_z);
+    pi_z = vfi_gpu(pi_z);
     if size(z_grid, 1) == sum(n_z) && size(z_grid, 2) == 1
-        z_gridvals = CreateGridvals(n_z, gpuArray(z_grid), 1);
+        z_gridvals = CreateGridvals(n_z, vfi_gpu(z_grid), 1);
     else
-        z_gridvals = gpuArray(z_grid);
+        z_gridvals = vfi_gpu(z_grid);
     end
     spec_n_z = n_z;
 else
@@ -70,8 +70,9 @@ if has_d && N_d > 1
     RM_4D = reshape(RM, [N_d, N_a, N_a, N_z]);
 end
 
-VKron = zeros(N_a, N_z, 'gpuArray');
-PolicyKron = ones(N_a, N_z, 'gpuArray');
+% Note that we wrap gpuArray around zeros(...) because zeros(..., 'gpuArray') is hijacked by MATLAB's JIT
+VKron = vfi_gpu(zeros(N_a, N_z));
+PolicyKron = vfi_gpu(ones(N_a, N_z));
 pi_z_T = pi_z';
 has_piz_pos = double(pi_z_T > 0);
 
@@ -168,7 +169,7 @@ if ~has_d
     if l_a == 1
         Policy = reshape(PolicyKron, state_dims);
     else
-        Policy = zeros([l_a, state_dims], 'gpuArray');
+        Policy = vfi_gpu(zeros([l_a, state_dims]));
         a_cum = 1;
         for i = 1:l_a
             Policy(i, :) = rem(ceil(PolicyKron(:)' / a_cum) - 1, n_a(i)) + 1;
@@ -178,7 +179,7 @@ if ~has_d
 else
     l_d = length(n_d);
     n_rows = l_d + l_a;
-    Policy = zeros([n_rows, state_dims], 'gpuArray');
+    Policy = vfi_gpu(zeros([n_rows, state_dims]));
     d_idx = rem(PolicyKron(:)' - 1, N_d) + 1;
     a_idx = ceil(PolicyKron(:)' / N_d);
     d_cum = 1;

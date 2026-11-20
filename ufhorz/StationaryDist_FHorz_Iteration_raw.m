@@ -35,10 +35,11 @@ if exist('OCTAVE_VERSION', 'builtin') ~= 0
     return;
 end
 
-Policy_aprimez=Policy_aprime+N_a*gpuArray(0:1:N_z-1); % Note: add z' index following the z dimension [Tan improvement, z stays where it is]
+Policy_aprimez=Policy_aprime+N_a*vfi_gpu(0:1:N_z-1); % Note: add z' index following the z dimension [Tan improvement, z stays where it is]
 Policy_aprimez=gather(Policy_aprimez);
 
-StationaryDistKron=zeros(N_a*N_z,N_j,'gpuArray');
+% Note that we wrap gpuArray around zeros(...) because zeros(..., 'gpuArray') is hijacked by MATLAB's JIT
+StationaryDistKron=vfi_gpu(zeros(N_a*N_z,N_j));
 StationaryDistKron(:,1)=jequaloneDistKron;
 
 StationaryDist_jj=sparse(gather(jequaloneDistKron));

@@ -130,43 +130,43 @@ end
 %% expassetz: aprime(d,a2,z)
 if l_z==1
     if l_dexp==1
-        a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, shiftdim(z_gridvals(:,1),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, shiftdim(z_gridvals(:,1),-2), ParamCell{:});
     elseif l_dexp==2
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, shiftdim(z_gridvals(:,1),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, shiftdim(z_gridvals(:,1),-2), ParamCell{:});
     elseif l_dexp==3
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, shiftdim(z_gridvals(:,1),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, shiftdim(z_gridvals(:,1),-2), ParamCell{:});
     elseif l_dexp==4
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, shiftdim(z_gridvals(:,1),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, shiftdim(z_gridvals(:,1),-2), ParamCell{:});
     end
 elseif l_z==2
     if l_dexp==1
-        a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), ParamCell{:});
     elseif l_dexp==2
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), ParamCell{:});
     elseif l_dexp==3
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), ParamCell{:});
     elseif l_dexp==4
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), ParamCell{:});
     end
 elseif l_z==3
     if l_dexp==1
-        a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), ParamCell{:});
     elseif l_dexp==2
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), ParamCell{:});
     elseif l_dexp==3
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), ParamCell{:});
     elseif l_dexp==4
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), ParamCell{:});
     end
 elseif l_z==4
     if l_dexp==1
-        a2primeVals=arrayfun(aprimeFn, d1vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), shiftdim(z_gridvals(:,4),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), shiftdim(z_gridvals(:,4),-2), ParamCell{:});
     elseif l_dexp==2
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), shiftdim(z_gridvals(:,4),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), shiftdim(z_gridvals(:,4),-2), ParamCell{:});
     elseif l_dexp==3
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), shiftdim(z_gridvals(:,4),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), shiftdim(z_gridvals(:,4),-2), ParamCell{:});
     elseif l_dexp==4
-        a2primeVals=arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), shiftdim(z_gridvals(:,4),-2), ParamCell{:});
+        a2primeVals=vfi_arrayfun(aprimeFn, d1vals, d2vals, d3vals, d4vals, a2vals, shiftdim(z_gridvals(:,1),-2), shiftdim(z_gridvals(:,2),-2), shiftdim(z_gridvals(:,3),-2), shiftdim(z_gridvals(:,4),-2), ParamCell{:});
     end
 end
 

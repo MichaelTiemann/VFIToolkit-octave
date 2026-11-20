@@ -26,7 +26,7 @@ if exist('vfoptions','var')==0
     vfoptions.n_ambiguity=0;
     vfoptions.n_e=0;
     vfoptions.n_semiz=0;
-    vfoptions.parallel=1+(gpuDeviceCount>0);
+    vfoptions.parallel=1 + (gpuDeviceCount > 0);
     vfoptions.outputkron=0;
     vfoptions.alreadygridvals=0;
     vfoptions.alreadygridvals_semiexo=0;
@@ -55,7 +55,7 @@ else
     if ~isfield(vfoptions,'n_ambiguity'); vfoptions.n_ambiguity=0; end
     if ~isfield(vfoptions,'n_e'); vfoptions.n_e=0; end
     if ~isfield(vfoptions,'n_semiz'); vfoptions.n_semiz=0; end
-    if ~isfield(vfoptions,'parallel'); vfoptions.parallel=1+(gpuDeviceCount>0); end
+    if ~isfield(vfoptions,'parallel'); vfoptions.parallel=1 + (gpuDeviceCount > 0); end
     if ~isfield(vfoptions,'outputkron'); vfoptions.outputkron=0; end
     if ~isfield(vfoptions,'alreadygridvals'); vfoptions.alreadygridvals=0; end
     if ~isfield(vfoptions,'alreadygridvals_semiexo'); vfoptions.alreadygridvals_semiexo=0; end
@@ -78,17 +78,18 @@ if ~all(size(a_grid)==[sum(n_a), 1])
     error('a_grid is not the correct shape (should be of size sum(n_a)-by-1; a (stacked) column vector)')
 end
 
-if vfoptions.parallel<2
+% We can still do interesting things when vfoptions.parallel == 1
+if vfoptions.parallel == 0
     [V,Policy]=ValueFnIter_FHorz_CPU(n_d,n_a,n_z,N_j,d_grid, a_grid, z_grid, pi_z, ReturnFn, Parameters, DiscountFactorParamNames, vfoptions);
     varargout={V,Policy};
     return
 end
 
 %% Prepare grids
-d_grid=gpuArray(d_grid);
-a_grid=gpuArray(a_grid);
-z_grid=gpuArray(z_grid);
-pi_z=gpuArray(pi_z);
+d_grid=vfi_gpu(d_grid);
+a_grid=vfi_gpu(a_grid);
+z_grid=vfi_gpu(z_grid);
+pi_z=vfi_gpu(pi_z);
 if size(d_grid,2)==1
     d_gridvals=CreateGridvals(n_d,d_grid,1);
 else

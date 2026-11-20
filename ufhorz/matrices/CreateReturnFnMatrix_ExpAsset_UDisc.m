@@ -48,7 +48,7 @@ if sum(n_e) > 0
     end
 end
 
-Fmatrix = arrayfun(ReturnFn, GridParamsCell{:}, ReturnFnParamsCell{:});
+Fmatrix = vfi_arrayfun(ReturnFn, GridParamsCell{:}, ReturnFnParamsCell{:});
 
 if Level == 1
     Fmatrix = reshape(Fmatrix, [N_d, N_a1p, N_a1, N_a2, N_bothz, N_e]);

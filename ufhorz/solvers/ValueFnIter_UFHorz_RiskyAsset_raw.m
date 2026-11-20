@@ -27,11 +27,12 @@ if isempty(ReturnFnParamNames)
     ReturnFnParamNames = ReturnFnParamNamesFn(ReturnFn, n_d, n_a, n_z, N_j, vfoptions, Parameters);
 end
 
+% Note that we wrap gpuArray around zeros(...) because zeros(..., 'gpuArray') is hijacked by MATLAB's JIT
 if qh_mode == 1
     vfopt_exp = vfoptions; vfopt_exp.exoticpreferences = 'None';
     [Valt, Policyalt] = ValueFnIter_UFHorz_RiskyAsset_raw(n_d, n_a, n_z, N_j, d_grid, a_grid, z_gridvals_J, pi_z_J, ReturnFn, Parameters, DiscountFactorParamNames, ReturnFnParamNames, vfopt_exp);
 elseif qh_mode == 2
-    Valt = zeros(N_a, N_bothz, N_e, N_j, 'gpuArray');
+    Valt = vfi_gpu(zeros(N_a, N_bothz, N_e, N_j));
     Policyalt = [];
 else
     Valt = [];
@@ -39,21 +40,21 @@ else
 end
 
 % --- 2. Preallocate Outputs & Persistent Slice Offsets ---
-V      = zeros(N_a, N_bothz, N_e, N_j, 'gpuArray');
-Policy = zeros(1, N_a, N_bothz, N_e, N_j, 'gpuArray');
+V      = vfi_gpu(zeros(N_a, N_bothz, N_e, N_j));
+Policy = vfi_gpu(zeros(1, N_a, N_bothz, N_e, N_j));
 
-aind_SL  = reshape(gpuArray(0:1:N_a-1),       [1, N_a, 1, 1]);
-bzind_SL = reshape(gpuArray(0:1:N_z_slice-1), [1, 1, N_z_slice, 1]);
-eind_SL  = reshape(gpuArray(0:1:N_e_slice-1), [1, 1, 1, N_e_slice]);
+aind_SL  = reshape(vfi_gpu(0:1:N_a-1),       [1, N_a, 1, 1]);
+bzind_SL = reshape(vfi_gpu(0:1:N_z_slice-1), [1, 1, N_z_slice, 1]);
+eind_SL  = reshape(vfi_gpu(0:1:N_e_slice-1), [1, 1, 1, N_e_slice]);
 
 d1_state_off = (N_d3 * N_a1) * (aind_SL + N_a * bzind_SL + (N_a * N_z_slice) * eind_SL);
 d2_bz_off    = (N_d3 * N_a1) * bzind_SL;
 
 if N_d_outer > 1
-    V_fordouter = zeros(N_a, N_bothz, N_e, N_d_outer, 'gpuArray');
-    P_fordouter = zeros(N_a, N_bothz, N_e, N_d_outer, 'gpuArray');
+    V_fordouter = vfi_gpu(zeros(N_a, N_bothz, N_e, N_d_outer));
+    P_fordouter = vfi_gpu(zeros(N_a, N_bothz, N_e, N_d_outer));
     if qh_mode == 2
-        Valt_fordouter = zeros(N_a, N_bothz, N_e, N_d_outer, 'gpuArray');
+        Valt_fordouter = vfi_gpu(zeros(N_a, N_bothz, N_e, N_d_outer));
     end
 end
 
@@ -276,7 +277,7 @@ for j = N_j:-1:1
     if N_d_outer > 1
         [V(:,:,:,j), Policy(:,:,:,:,j), max_d_out] = extract_pol_local(V_fordouter, P_fordouter, N_a, N_bothz, N_e);
         if qh_mode == 2
-            lin_idx = gpuArray(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
+            lin_idx = vfi_gpu(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
             Valt(:,:,:,j) = reshape(Valt_fordouter(lin_idx), [N_a, N_bothz, N_e]);
         end
     end
@@ -298,7 +299,7 @@ if ~isempty(EVpre_flat)
     EV_z = EV_val * pi_bz';
     EV_z((EVinf * (pi_bz' > 0)) > 0) = -Inf; % [N_a, N_bothz]
 
-    a1_base = repelem(gpuArray(1:1:N_a1)', N_d23, N_u);
+    a1_base = repelem(vfi_gpu(1:1:N_a1)', N_d23, N_u);
     idx_lo  = a1_base + N_a1 * repmat(a2p_idx - 1, N_a1, 1);
     idx_hi  = a1_base + N_a1 * repmat(a2p_idx,     N_a1, 1);
 
@@ -362,7 +363,7 @@ end
 
 function [V_j, Pol_j, max_d_out] = extract_pol_local(V_fordouter, P1, N_a, N_bothz, N_e)
 [V_j, max_d_out] = max(V_fordouter, [], 4);
-lin_idx = gpuArray(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
+lin_idx = vfi_gpu(1:(N_a * N_bothz * N_e))' + (N_a * N_bothz * N_e) * (max_d_out(:) - 1);
 Pol_j = reshape(P1(lin_idx), [1, N_a, N_bothz, N_e]);
 end
 

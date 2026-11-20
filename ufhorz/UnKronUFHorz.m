@@ -54,7 +54,8 @@ if is_gi
     s4 = size(PolicyKron, 4);
     s5 = size(PolicyKron, 5);
     n_rows = l_d + l_a_c + 2;
-    Policy = zeros(n_rows, s2, s3, s4, s5, 'gpuArray');
+    % Note that we wrap gpuArray around zeros(...) because zeros(..., 'gpuArray') is hijacked by MATLAB's JIT
+    Policy = vfi_gpu(zeros(n_rows, s2, s3, s4, s5));
 
     if l_d > 0
         d_idx = PolicyKron(1,:,:,:,:);
@@ -92,7 +93,7 @@ else
     s4 = size(PolicyKron, 4);
     s5 = size(PolicyKron, 5);
     n_rows = l_d + l_a_c;
-    Policy = zeros(n_rows, s2, s3, s4, s5, 'gpuArray');
+    Policy = vfi_gpu(zeros(n_rows, s2, s3, s4, s5));
 
     if size(PolicyKron, 1) == 2
         d_idx = PolicyKron(1,:,:,:,:);

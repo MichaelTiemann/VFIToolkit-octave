@@ -11,8 +11,8 @@ if sum(vfoptions.refine_d) ~= length(n_d)
 end
 
 vfoptions.d_grid = d_grid;
-vfoptions.pi_u   = gpuArray(vfoptions.pi_u);
-vfoptions.u_grid = gpuArray(vfoptions.u_grid);
+vfoptions.pi_u   = vfi_gpu(vfoptions.pi_u);
+vfoptions.u_grid = vfi_gpu(vfoptions.u_grid);
 
 if vfoptions.divideandconquer == 1 && vfoptions.gridinterplayer == 1
     [V, Policy, Valt, Policyalt] = ValueFnIter_UFHorz_RiskyAsset_DC_GI(n_d, n_a, n_z, N_j, d_grid, a_grid, z_gridvals_J, pi_z_J, ReturnFn, Parameters, DiscountFactorParamNames, ReturnFnParamNames, vfoptions);

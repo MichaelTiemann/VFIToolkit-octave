@@ -51,7 +51,7 @@ if nargin(aprimeFn) ~= l_d_active + l_u_active + length(aprimeFnParams)
 end
 
 % Evaluate across the entire state space dynamically
-a2primeVals = arrayfun(aprimeFn, args{:}, ParamCell{:});
+a2primeVals = vfi_arrayfun(aprimeFn, args{:}, ParamCell{:});
 
 
 %% Calcuate grid indexes and probs from the values

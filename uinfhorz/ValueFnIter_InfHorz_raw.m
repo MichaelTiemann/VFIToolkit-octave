@@ -4,14 +4,14 @@ N_d=prod(n_d);
 N_a=prod(n_a);
 N_z=prod(n_z);
 
-% Policy=zeros(N_a,N_z,'gpuArray');
-% Ftemp=zeros(N_a,N_z,'gpuArray');
+% Policy=vfi_gpu(zeros(N_a,N_z));
+% Ftemp=vfi_gpu(zeros(N_a,N_z));
 
 pi_z_T=pi_z';
 has_piz_pos=(pi_z_T>0);
 pi_z_howards=repelem(pi_z,N_a,1);
 
-addindexforaz=gpuArray(shiftdim((0:1:N_a-1)*N_d*N_a+shiftdim((0:1:N_z-1)*N_d*N_a*N_a,-1),1));
+addindexforaz=vfi_gpu(shiftdim((0:1:N_a-1)*N_d*N_a+shiftdim((0:1:N_z-1)*N_d*N_a*N_a,-1),1));
 
 if N_d>1
     RM_4D=reshape(ReturnMatrix,[N_d,N_a,N_a,N_z]);
@@ -79,7 +79,7 @@ while currdist>Tolerance && tempcounter<=maxiter
 end
 
 
-Policy=zeros(2,N_a,N_z,'gpuArray'); %NOTE: this is not actually in Kron form
+Policy=vfi_gpu(zeros(2,N_a,N_z)); %NOTE: this is not actually in Kron form
 Policy(1,:,:)=shiftdim(rem(PolicyIndexes-1,N_d)+1,-1);
 Policy(2,:,:)=shiftdim(ceil(PolicyIndexes/N_d),-1);
 
